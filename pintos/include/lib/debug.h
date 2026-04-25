@@ -1,16 +1,16 @@
 #ifndef __LIB_DEBUG_H
 #define __LIB_DEBUG_H
 
-/* GCC lets us add "attributes" to functions, function
- * parameters, etc. to indicate their properties.
- * See the GCC manual for details. */
+/* GCC는 함수, 함수 인자 등에 "attribute"를 붙여
+ * 그 속성을 표시할 수 있게 해 준다.
+ * 자세한 내용은 GCC 매뉴얼을 참고하라. */
 #define UNUSED __attribute__ ((unused))
 #define NO_RETURN __attribute__ ((noreturn))
 #define NO_INLINE __attribute__ ((noinline))
 #define PRINTF_FORMAT(FMT, FIRST) __attribute__ ((format (printf, FMT, FIRST)))
 
-/* Halts the OS, printing the source file name, line number, and
- * function name, plus a user-specific message. */
+/* source file 이름, line 번호, 함수 이름과 사용자 지정 메시지를 출력한 뒤
+ * OS를 멈춘다. */
 #define PANIC(...) debug_panic (__FILE__, __LINE__, __func__, __VA_ARGS__)
 
 void debug_panic (const char *file, int line, const char *function,
@@ -21,8 +21,8 @@ void debug_backtrace (void);
 
 
 
-/* This is outside the header guard so that debug.h may be
- * included multiple times with different settings of NDEBUG. */
+/* 이것은 header guard 바깥에 있다.
+ * debug.h가 NDEBUG 설정을 달리하여 여러 번 include될 수 있게 하기 위해서다. */
 #undef ASSERT
 #undef NOT_REACHED
 

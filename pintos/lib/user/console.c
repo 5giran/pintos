@@ -3,14 +3,13 @@
 #include <syscall.h>
 #include <syscall-nr.h>
 
-/* The standard vprintf() function,
-   which is like printf() but uses a va_list. */
+/* 표준 vprintf() 함수로, printf()와 비슷하지만 va_list를 사용한다. */
 int
 vprintf (const char *format, va_list args) {
 	return vhprintf (STDOUT_FILENO, format, args);
 }
 
-/* Like printf(), but writes output to the given HANDLE. */
+/* printf()와 같지만, 출력을 주어진 HANDLE에 쓴다. */
 int
 hprintf (int handle, const char *format, ...) {
 	va_list args;
@@ -23,8 +22,7 @@ hprintf (int handle, const char *format, ...) {
 	return retval;
 }
 
-/* Writes string S to the console, followed by a new-line
-   character. */
+/* 문자열 S를 콘솔에 쓰고, 뒤에 줄바꿈 문자를 덧붙인다. */
 int
 puts (const char *s) {
 	write (STDOUT_FILENO, s, strlen (s));
@@ -33,7 +31,7 @@ puts (const char *s) {
 	return 0;
 }
 
-/* Writes C to the console. */
+/* C를 콘솔에 쓴다. */
 int
 putchar (int c) {
 	char c2 = c;
@@ -41,20 +39,18 @@ putchar (int c) {
 	return c;
 }
 
-/* Auxiliary data for vhprintf_helper(). */
+/* vhprintf_helper()용 보조 데이터. */
 struct vhprintf_aux {
-	char buf[64];       /* Character buffer. */
-	char *p;            /* Current position in buffer. */
-	int char_cnt;       /* Total characters written so far. */
-	int handle;         /* Output file handle. */
+	char buf[64];       /* 문자 버퍼. */
+	char *p;            /* 버퍼의 현재 위치. */
+	int char_cnt;       /* 지금까지 기록한 총 문자 수. */
+	int handle;         /* 출력 파일 HANDLE. */
 };
 
 static void add_char (char, void *);
 static void flush (struct vhprintf_aux *);
 
-/* Formats the printf() format specification FORMAT with
-   arguments given in ARGS and writes the output to the given
-   HANDLE. */
+/* printf()의 형식 지정자 FORMAT을 ARGS에 담긴 인자로 형식화하고, 출력을 주어진 HANDLE에 쓴다. */
 int
 vhprintf (int handle, const char *format, va_list args) {
 	struct vhprintf_aux aux;
@@ -66,8 +62,7 @@ vhprintf (int handle, const char *format, va_list args) {
 	return aux.char_cnt;
 }
 
-/* Adds C to the buffer in AUX, flushing it if the buffer fills
-   up. */
+/* AUX의 버퍼에 C를 추가하고, 버퍼가 가득 차면 비운다. */
 static void
 add_char (char c, void *aux_) {
 	struct vhprintf_aux *aux = aux_;
@@ -77,7 +72,7 @@ add_char (char c, void *aux_) {
 	aux->char_cnt++;
 }
 
-/* Flushes the buffer in AUX. */
+/* AUX의 버퍼를 비운다. */
 static void
 flush (struct vhprintf_aux *aux) {
 	if (aux->p > aux->buf)

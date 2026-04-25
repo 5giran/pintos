@@ -10,77 +10,64 @@
 static void vprintf_helper (char, void *);
 static void putchar_have_lock (uint8_t c);
 
-/* The console lock.
-   Both the vga and serial layers do their own locking, so it's
-   safe to call them at any time.
-   But this lock is useful to prevent simultaneous printf() calls
-   from mixing their output, which looks confusing. */
+/* 콘솔 락.
+   vga와 serial 계층은 각각 자체적인 락을 사용하므로, 언제든지 호출해도 안전합니다.
+   하지만 이 락은 동시에 호출된 printf()가 출력을 섞어 혼란스럽게 만드는 것을 막는 데 유용합니다. */
 static struct lock console_lock;
 
-/* True in ordinary circumstances: we want to use the console
-   lock to avoid mixing output between threads, as explained
-   above.
+/* 일반적인 상황에서는 true입니다. 위에서 설명했듯이 스레드 간 출력이 섞이지 않도록 콘솔 락을 사용하고 싶기 때문입니다.
 
-   False in early boot before the point that locks are functional
-   or the console lock has been initialized, or after a kernel
-   panics.  In the former case, taking the lock would cause an
-   assertion failure, which in turn would cause a panic, turning
-   it into the latter case.  In the latter case, if it is a buggy
-   lock_acquire() implementation that caused the panic, we'll
-   likely just recurse. */
+   락이 아직 동작하지 않거나 콘솔 락이 초기화되기 전인 초기 부팅 단계, 또는 커널 패닉 이후에는 false입니다. 첫 번째 경우에는
+   락을 잡으면 assertion failure가 발생하고, 그 결과 패닉이 나서 결국 두 번째 경우가 됩니다. 두 번째 경우에는, 패닉을
+   유발한 것이 버그가 있는 lock_acquire() 구현이라면, 아마 그냥 재귀적으로 다시 들어가게 될 것입니다. */
 static bool use_console_lock;
 
-/* It's possible, if you add enough debug output to Pintos, to
-   try to recursively grab console_lock from a single thread.  As
-   a real example, I added a printf() call to palloc_free().
-   Here's a real backtrace that resulted:
+/* Pintos에 충분한 디버그 출력을 추가하면, 단일 스레드에서 console_lock을 재귀적으로 잡아 보려 할 수 있습니다. 실제
+   예로, palloc_free()에 printf() 호출을 하나 추가했습니다.
+   그 결과 나온 실제 backtrace는 다음과 같습니다:
 
    lock_console()
    vprintf()
-   printf()             - palloc() tries to grab the lock again
-   palloc_free()        
-   schedule_tail()      - another thread dying as we switch threads
+   printf()             - palloc()가 다시 락을 잡으려 함
+   palloc_free()
+   schedule_tail()      - 스레드 전환 중 다른 스레드가 죽음
    schedule()
    thread_yield()
-   intr_handler()       - timer interrupt
+   intr_handler()       - 타이머 인터럽트
    intr_set_level()
    serial_putc()
    putchar_have_lock()
    putbuf()
-   sys_write()          - one process writing to the console
+   sys_write()          - 한 프로세스가 콘솔에 쓰는 중
    syscall_handler()
    intr_handler()
 
-   This kind of thing is very difficult to debug, so we avoid the
-   problem by simulating a recursive lock with a depth
-   counter. */
+   이런 종류의 문제는 디버깅하기 매우 어렵기 때문에, 우리는 깊이 카운터를 사용해 재귀 락을 흉내 내는 방식으로 이 문제를 피합니다. */
 static int console_lock_depth;
 
-/* Number of characters written to console. */
+/* 콘솔에 기록된 문자 수. */
 static int64_t write_cnt;
 
-/* Enable console locking. */
+/* 콘솔 락을 활성화합니다. */
 void
 console_init (void) {
 	lock_init (&console_lock);
 	use_console_lock = true;
 }
 
-/* Notifies the console that a kernel panic is underway,
-   which warns it to avoid trying to take the console lock from
-   now on. */
+/* 커널 패닉이 진행 중임을 콘솔에 알리며, 이제부터는 콘솔 락을 잡으려 시도하지 않도록 경고합니다. */
 void
 console_panic (void) {
 	use_console_lock = false;
 }
 
-/* Prints console statistics. */
+/* 콘솔 통계를 출력합니다. */
 void
 console_print_stats (void) {
 	printf ("Console: %lld characters output\n", write_cnt);
 }
 
-/* Acquires the console lock. */
+/* 콘솔 락을 획득합니다. */
 	static void
 acquire_console (void) {
 	if (!intr_context () && use_console_lock) {
@@ -91,7 +78,7 @@ acquire_console (void) {
 	}
 }
 
-/* Releases the console lock. */
+/* 콘솔 락을 해제합니다. */
 static void
 release_console (void) {
 	if (!intr_context () && use_console_lock) {
@@ -102,8 +89,7 @@ release_console (void) {
 	}
 }
 
-/* Returns true if the current thread has the console lock,
-   false otherwise. */
+/* 현재 스레드가 콘솔 락을 가지고 있으면 true를, 그렇지 않으면 false를 반환합니다. */
 static bool
 console_locked_by_current_thread (void) {
 	return (intr_context ()
@@ -111,9 +97,9 @@ console_locked_by_current_thread (void) {
 			|| lock_held_by_current_thread (&console_lock));
 }
 
-/* The standard vprintf() function,
-   which is like printf() but uses a va_list.
-   Writes its output to both vga display and serial port. */
+/* 표준 vprintf() 함수로,
+   printf()와 비슷하지만 va_list를 사용합니다.
+   출력을 vga 디스플레이와 serial 포트 양쪽에 씁니다. */
 int
 vprintf (const char *format, va_list args) {
 	int char_cnt = 0;
@@ -125,8 +111,8 @@ vprintf (const char *format, va_list args) {
 	return char_cnt;
 }
 
-/* Writes string S to the console, followed by a new-line
-   character. */
+/* 문자열 S를 콘솔에 쓰고, 뒤이어 개행
+   문자를 붙입니다. */
 int
 puts (const char *s) {
 	acquire_console ();
@@ -138,7 +124,7 @@ puts (const char *s) {
 	return 0;
 }
 
-/* Writes the N characters in BUFFER to the console. */
+/* BUFFER의 N개 문자를 콘솔에 씁니다. */
 void
 putbuf (const char *buffer, size_t n) {
 	acquire_console ();
@@ -147,7 +133,7 @@ putbuf (const char *buffer, size_t n) {
 	release_console ();
 }
 
-/* Writes C to the vga display and serial port. */
+/* C를 vga 디스플레이와 serial 포트에 씁니다. */
 int
 putchar (int c) {
 	acquire_console ();
@@ -157,7 +143,7 @@ putchar (int c) {
 	return c;
 }
 
-/* Helper function for vprintf(). */
+/* vprintf()를 위한 도우미 함수. */
 static void
 vprintf_helper (char c, void *char_cnt_) {
 	int *char_cnt = char_cnt_;
@@ -165,9 +151,8 @@ vprintf_helper (char c, void *char_cnt_) {
 	putchar_have_lock (c);
 }
 
-/* Writes C to the vga display and serial port.
-   The caller has already acquired the console lock if
-   appropriate. */
+/* C를 vga 디스플레이와 serial 포트에 씁니다.
+   적절하다면 호출자는 이미 콘솔 락을 획득한 상태입니다. */
 static void
 putchar_have_lock (uint8_t c) {
 	ASSERT (console_locked_by_current_thread ());

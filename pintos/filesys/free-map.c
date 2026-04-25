@@ -5,10 +5,10 @@
 #include "filesys/filesys.h"
 #include "filesys/inode.h"
 
-static struct file *free_map_file;   /* Free map file. */
-static struct bitmap *free_map;      /* Free map, one bit per disk sector. */
+static struct file *free_map_file;   /* free map 파일. */
+static struct bitmap *free_map;      /* 디스크 섹터당 1비트인 free map. */
 
-/* Initializes the free map. */
+/* free map을 초기화한다. */
 void
 free_map_init (void) {
 	free_map = bitmap_create (disk_size (filesys_disk));
@@ -18,10 +18,8 @@ free_map_init (void) {
 	bitmap_mark (free_map, ROOT_DIR_SECTOR);
 }
 
-/* Allocates CNT consecutive sectors from the free map and stores
- * the first into *SECTORP.
- * Returns true if successful, false if all sectors were
- * available. */
+/* free map에서 연속된 CNT개의 섹터를 할당하고, 첫 번째를 *SECTORP에 저장한다.
+ * 성공하면 true를 반환하고, 필요한 섹터를 확보하지 못하면 false를 반환한다. */
 bool
 free_map_allocate (size_t cnt, disk_sector_t *sectorp) {
 	disk_sector_t sector = bitmap_scan_and_flip (free_map, 0, cnt, false);
@@ -36,7 +34,7 @@ free_map_allocate (size_t cnt, disk_sector_t *sectorp) {
 	return sector != BITMAP_ERROR;
 }
 
-/* Makes CNT sectors starting at SECTOR available for use. */
+/* SECTOR에서 시작하는 CNT개의 섹터를 사용 가능하게 만든다. */
 void
 free_map_release (disk_sector_t sector, size_t cnt) {
 	ASSERT (bitmap_all (free_map, sector, cnt));
@@ -44,7 +42,7 @@ free_map_release (disk_sector_t sector, size_t cnt) {
 	bitmap_write (free_map, free_map_file);
 }
 
-/* Opens the free map file and reads it from disk. */
+/* free map file을 열고 디스크에서 읽어온다. */
 void
 free_map_open (void) {
 	free_map_file = file_open (inode_open (FREE_MAP_SECTOR));
@@ -54,21 +52,20 @@ free_map_open (void) {
 		PANIC ("can't read free map");
 }
 
-/* Writes the free map to disk and closes the free map file. */
+/* free map을 디스크에 쓰고 free map file을 닫는다. */
 void
 free_map_close (void) {
 	file_close (free_map_file);
 }
 
-/* Creates a new free map file on disk and writes the free map to
- * it. */
+/* 디스크에 새 free map file을 만들고 free map을 거기에 쓴다. */
 void
 free_map_create (void) {
-	/* Create inode. */
+	/* inode를 생성한다. */
 	if (!inode_create (FREE_MAP_SECTOR, bitmap_file_size (free_map)))
 		PANIC ("free map creation failed");
 
-	/* Write bitmap to file. */
+	/* bitmap을 file에 쓴다. */
 	free_map_file = file_open (inode_open (FREE_MAP_SECTOR));
 	if (free_map_file == NULL)
 		PANIC ("can't open free map");
