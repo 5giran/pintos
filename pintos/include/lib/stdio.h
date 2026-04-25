@@ -7,15 +7,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Include lib/user/stdio.h or lib/kernel/stdio.h, as
- * appropriate. */
+/* 상황에 맞게 lib/user/stdio.h 또는 lib/kernel/stdio.h를 포함한다. */
 #include_next <stdio.h>
 
-/* Predefined file handles. */
+/* 미리 정의된 파일 핸들. */
 #define STDIN_FILENO 0
 #define STDOUT_FILENO 1
 
-/* Standard functions. */
+/* 표준 함수. */
 int printf (const char *, ...) PRINTF_FORMAT (1, 2);
 int snprintf (char *, size_t, const char *, ...) PRINTF_FORMAT (3, 4);
 int vprintf (const char *, va_list) PRINTF_FORMAT (1, 0);
@@ -23,16 +22,16 @@ int vsnprintf (char *, size_t, const char *, va_list) PRINTF_FORMAT (3, 0);
 int putchar (int);
 int puts (const char *);
 
-/* Nonstandard functions. */
+/* 비표준 함수. */
 void hex_dump (uintptr_t ofs, const void *, size_t size, bool ascii);
 
-/* Internal functions. */
+/* 내부 함수. */
 void __vprintf (const char *format, va_list args,
 		void (*output) (char, void *), void *aux);
 void __printf (const char *format,
 		void (*output) (char, void *), void *aux, ...);
 
-/* Try to be helpful. */
+/* 도움이 되도록 한다. */
 #define sprintf dont_use_sprintf_use_snprintf
 #define vsprintf dont_use_vsprintf_use_vsnprintf
 

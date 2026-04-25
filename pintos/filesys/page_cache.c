@@ -1,11 +1,11 @@
-/* page_cache.c: Implementation of Page Cache (Buffer Cache). */
+/* page_cache.c: 페이지 캐시(Buffer Cache) 구현. */
 
 #include "vm/vm.h"
 static bool page_cache_readahead (struct page *page, void *kva);
 static bool page_cache_writeback (struct page *page);
 static void page_cache_destroy (struct page *page);
 
-/* DO NOT MODIFY this struct */
+/* 이 struct는 수정하지 마십시오. */
 static const struct page_operations page_cache_op = {
 	.swap_in = page_cache_readahead,
 	.swap_out = page_cache_writeback,
@@ -15,36 +15,36 @@ static const struct page_operations page_cache_op = {
 
 tid_t page_cache_workerd;
 
-/* The initializer of file vm */
+/* vm 파일의 초기화 함수 */
 void
 pagecache_init (void) {
-	/* TODO: Create a worker daemon for page cache with page_cache_kworkerd */
+	/* TODO: page_cache_kworkerd를 사용해 page cache용 워커 데몬을 만드십시오. */
 }
 
-/* Initialize the page cache */
+/* page cache를 초기화합니다. */
 bool
 page_cache_initializer (struct page *page, enum vm_type type, void *kva) {
-	/* Set up the handler */
+	/* handler를 설정합니다. */
 	page->operations = &page_cache_op;
 
 }
 
-/* Utilze the Swap in mechanism to implement readhead */
+/* readhead를 구현하기 위해 Swap in 메커니즘을 활용합니다. */
 static bool
 page_cache_readahead (struct page *page, void *kva) {
 }
 
-/* Utilze the Swap out mechanism to implement writeback */
+/* writeback을 구현하기 위해 Swap out 메커니즘을 활용합니다. */
 static bool
 page_cache_writeback (struct page *page) {
 }
 
-/* Destory the page_cache. */
+/* page_cache를 해제합니다. */
 static void
 page_cache_destroy (struct page *page) {
 }
 
-/* Worker thread for page cache */
+/* page cache용 worker thread */
 static void
 page_cache_kworkerd (void *aux) {
 }
