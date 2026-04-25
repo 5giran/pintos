@@ -29,6 +29,11 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
+/* Blocked 스레드들이 대기하고 있는 공간 */
+static struct list sleep_list;
+
+static bool wakeup_ticks_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
    corresponding interrupt. */
@@ -44,7 +49,8 @@ timer_init (void) {
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 
-	struct list sleep_list;
+	list_init(&sleep_list);
+
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -89,6 +95,13 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
+static bool wakeup_ticks_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED) {
+	struct thread *thread_a = list_entry(a, struct thread, elem);
+	struct thread *thread_b = list_entry(b, struct thread, elem);
+
+	return (thread_a->wakeup_ticks < thread_b->wakeup_ticks);
+}
+
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
@@ -101,17 +114,18 @@ timer_sleep (int64_t ticks) {
 
 	int64_t start = timer_ticks (); // 현재 타이머 tick값 저장: 기준 시간
 	int64_t wakeup_ticks = start + ticks; // 깨어날 절대 시간
+	struct thread *current_thread = thread_current();
+	current_thread->wakeup_ticks = start + ticks;
 
 	ASSERT (intr_get_level () == INTR_ON);
 	// 잠든 시간 이후로 몇 틱 지났는지 계산 - 주어진 틱만큼 지나지 않았다면
-	while (timer_elapsed (start) < ticks) // 아직 깰 때가 안됐다면
+	while (timer_elapsed (start) < ticks) {// 아직 깰 때가 안됐다면
 		old_level = intr_disable();
 		// thread를 sleep list에 넣어줘야돼 (wakeup_ticks 오름차순으로)
+		list_insert_ordered(&sleep_list, &current_thread->elem, &wakeup_ticks_less, NULL);
 		thread_block();
-		
 		intr_set_level(old_level); // intr_enable() 쓰는건 위험하다. (문서 정리 필요)
-		
-
+	}
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -142,6 +156,16 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	
+	while (!list_empty(&sleep_list)) {
+		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (t->wakeup_ticks > ticks) {
+			break;
+		}
+		
+		list_pop_front(&sleep_list);
+		thread_unblock(t);
+	}
 	thread_tick ();
 }
 
