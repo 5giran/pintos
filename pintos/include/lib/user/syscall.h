@@ -5,22 +5,22 @@
 #include <debug.h>
 #include <stddef.h>
 
-/* Process identifier. */
+/* process 식별자. */
 typedef int pid_t;
 #define PID_ERROR ((pid_t) -1)
 
-/* Map region identifier. */
+/* map 영역 식별자. */
 typedef int off_t;
 #define MAP_FAILED ((void *) NULL)
 
-/* Maximum characters in a filename written by readdir(). */
+/* readdir()가 쓰는 파일 이름의 최대 문자 수. */
 #define READDIR_MAX_LEN 14
 
-/* Typical return values from main() and arguments to exit(). */
-#define EXIT_SUCCESS 0          /* Successful execution. */
-#define EXIT_FAILURE 1          /* Unsuccessful execution. */
+/* main()의 전형적인 반환값과 exit() 인자. */
+#define EXIT_SUCCESS 0          /* 성공적인 실행. */
+#define EXIT_FAILURE 1          /* 실패한 실행. */
 
-/* Projects 2 and later. */
+/* Project 2 이상. */
 void halt (void) NO_RETURN;
 void exit (int status) NO_RETURN;
 pid_t fork (const char *thread_name);
@@ -38,11 +38,11 @@ void close (int fd);
 
 int dup2(int oldfd, int newfd);
 
-/* Project 3 and optionally project 4. */
+/* Project 3, 그리고 선택적으로 Project 4. */
 void *mmap (void *addr, size_t length, int writable, int fd, off_t offset);
 void munmap (void *addr);
 
-/* Project 4 only. */
+/* Project 4 전용. */
 bool chdir (const char *dir);
 bool mkdir (const char *dir);
 bool readdir (int fd, char name[READDIR_MAX_LEN + 1]);
