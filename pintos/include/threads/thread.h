@@ -83,11 +83,12 @@ typedef int tid_t;
  * ready 상태의 thread만 run queue에 있고,
  * blocked 상태의 thread만 semaphore 대기 리스트에 있기 때문이다. */
 struct thread {
-	/* thread.c가 소유한다. */
-	tid_t tid;                          /* thread 식별자. */
-	enum thread_status status;          /* thread 상태. */
-	char name[16];                      /* 이름(디버깅용). */
-	int priority;                       /* priority(우선순위). */
+	/* Owned by thread.c. */
+	tid_t tid;                          /* Thread identifier. */
+	enum thread_status status;          /* Thread state. */
+	char name[16];                      /* Name (for debugging purposes). */
+	int priority;                       /* Priority. */
+	int64_t wakeup_ticks;								/* 스레드가 잠들었다가 일어날 절대 시각. */
 
 	/* thread.c와 synch.c가 공유한다. */
 	struct list_elem elem;              /* list 원소. */

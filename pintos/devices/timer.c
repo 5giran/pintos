@@ -29,9 +29,14 @@ static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 
-/* 8254 Programmable Interval Timer (PIT)을 설정하여
-   초당 PIT_FREQ번 인터럽트를 발생시키고, 해당 인터럽트를
-   등록합니다. */
+/* Blocked 스레드들이 대기하고 있는 공간 */
+static struct list sleep_list;
+
+static bool wakeup_ticks_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED);
+
+/* Sets up the 8254 Programmable Interval Timer (PIT) to
+   interrupt PIT_FREQ times per second, and registers the
+   corresponding interrupt. */
 void
 timer_init (void) {
 	/* 8254 입력 주파수를 TIMER_FREQ로 나눈 값, 가장 가까운 정수로
@@ -43,6 +48,9 @@ timer_init (void) {
 	outb (0x40, count >> 8);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+	list_init(&sleep_list);
+
 }
 
 /* 짧은 지연을 구현하는 데 쓰이는 loops_per_tick를 보정합니다. */
@@ -87,17 +95,38 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* 대략 TICKS timer tick 동안 실행을 중단합니다. */
+static bool wakeup_ticks_less(struct list_elem *a, struct list_elem *b, void *aux UNUSED) {
+	struct thread *thread_a = list_entry(a, struct thread, elem);
+	struct thread *thread_b = list_entry(b, struct thread, elem);
+
+	return (thread_a->wakeup_ticks < thread_b->wakeup_ticks);
+}
+
+/* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
+	enum intr_level old_level;
+
+	// 잠자는 시간인 ticks가 0 이하면 잠을 잘 수가 없음.
+	if (ticks <= 0) {
+		return;
+	}
+
 	int64_t start = timer_ticks (); // 현재 타이머 tick값 저장: 기준 시간
+	int64_t wakeup_ticks = start + ticks; // 깨어날 절대 시간
+	struct thread *current_thread = thread_current();
+	current_thread->wakeup_ticks = start + ticks;
 
 	// 인터럽트가 켜져있는지 확인 - sleep은 인터럽트가 켜진 상태에만 사용가능하므로
 	ASSERT (intr_get_level () == INTR_ON);
 	// 잠든 시간 이후로 몇 틱 지났는지 계산 - 주어진 틱만큼 지나지 않았다면
-	while (timer_elapsed (start) < ticks)
-		thread_yield (); // CPU를 다른 스레드한테 양보
-	// 이게 busy waiting 구조임
+	while (timer_elapsed (start) < ticks) {// 아직 깰 때가 안됐다면
+		old_level = intr_disable();
+		// thread를 sleep list에 넣어줘야돼 (wakeup_ticks 오름차순으로)
+		list_insert_ordered(&sleep_list, &current_thread->elem, &wakeup_ticks_less, NULL);
+		thread_block();
+		intr_set_level(old_level); // intr_enable() 쓰는건 위험하다. (문서 정리 필요)
+	}
 }
 
 /* 대략 MS 밀리초 동안 실행을 중단합니다. */
@@ -123,11 +152,20 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
 /* 타이머 인터럽트 핸들러. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
+	
+	while (!list_empty(&sleep_list)) {
+		struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
+		if (t->wakeup_ticks > ticks) {
+			break;
+		}
+		
+		list_pop_front(&sleep_list);
+		thread_unblock(t);
+	}
 	thread_tick ();
 }
 
