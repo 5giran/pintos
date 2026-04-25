@@ -3,14 +3,14 @@
 
 #include <stddef.h>
 
-/* Standard functions. */
+/* 표준 함수. */
 int atoi (const char *);
 void qsort (void *array, size_t cnt, size_t size,
 		int (*compare) (const void *, const void *));
 void *bsearch (const void *key, const void *array, size_t cnt,
 		size_t size, int (*compare) (const void *, const void *));
 
-/* Nonstandard functions. */
+/* 비표준 함수. */
 void sort (void *array, size_t cnt, size_t size,
 		int (*compare) (const void *, const void *, void *aux),
 		void *aux);

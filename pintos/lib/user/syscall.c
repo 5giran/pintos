@@ -29,18 +29,15 @@ static __inline int64_t syscall (uint64_t num_, uint64_t a1_, uint64_t a2_,
 	return ret;
 }
 
-/* Invokes syscall NUMBER, passing no arguments, and returns the
-   return value as an `int'. */
+/* 인자 없이 syscall NUMBER를 호출하고, 반환값을 `int'로 돌려준다. */
 #define syscall0(NUMBER) ( \
 		syscall(((uint64_t) NUMBER), 0, 0, 0, 0, 0, 0))
 
-/* Invokes syscall NUMBER, passing argument ARG0, and returns the
-   return value as an `int'. */
+/* 인자 ARG0를 넘겨 syscall NUMBER를 호출하고, 반환값을 `int'로 돌려준다. */
 #define syscall1(NUMBER, ARG0) ( \
 		syscall(((uint64_t) NUMBER), \
 			((uint64_t) ARG0), 0, 0, 0, 0, 0))
-/* Invokes syscall NUMBER, passing arguments ARG0 and ARG1, and
-   returns the return value as an `int'. */
+/* 인자 ARG0와 ARG1을 넘겨 syscall NUMBER를 호출하고, 반환값을 `int'로 돌려준다. */
 #define syscall2(NUMBER, ARG0, ARG1) ( \
 		syscall(((uint64_t) NUMBER), \
 			((uint64_t) ARG0), \

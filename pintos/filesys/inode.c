@@ -7,39 +7,36 @@
 #include "filesys/free-map.h"
 #include "threads/malloc.h"
 
-/* Identifies an inode. */
+/* inode를 식별합니다. */
 #define INODE_MAGIC 0x494e4f44
 
-/* On-disk inode.
- * Must be exactly DISK_SECTOR_SIZE bytes long. */
+/* 디스크 상의 inode입니다.
+ * 정확히 DISK_SECTOR_SIZE 바이트여야 합니다. */
 struct inode_disk {
-	disk_sector_t start;                /* First data sector. */
-	off_t length;                       /* File size in bytes. */
-	unsigned magic;                     /* Magic number. */
-	uint32_t unused[125];               /* Not used. */
+	disk_sector_t start;                /* 첫 데이터 섹터. */
+	off_t length;                       /* 파일 크기(바이트). */
+	unsigned magic;                     /* 매직 번호. */
+	uint32_t unused[125];               /* 사용하지 않습니다. */
 };
 
-/* Returns the number of sectors to allocate for an inode SIZE
- * bytes long. */
+/* SIZE 바이트 길이의 inode에 대해 할당할 섹터 수를 반환합니다. */
 static inline size_t
 bytes_to_sectors (off_t size) {
 	return DIV_ROUND_UP (size, DISK_SECTOR_SIZE);
 }
 
-/* In-memory inode. */
+/* 메모리 내 inode. */
 struct inode {
-	struct list_elem elem;              /* Element in inode list. */
-	disk_sector_t sector;               /* Sector number of disk location. */
-	int open_cnt;                       /* Number of openers. */
-	bool removed;                       /* True if deleted, false otherwise. */
-	int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
-	struct inode_disk data;             /* Inode content. */
+	struct list_elem elem;              /* inode 목록의 요소. */
+	disk_sector_t sector;               /* 디스크 위치의 섹터 번호. */
+	int open_cnt;                       /* 열려 있는 개수. */
+	bool removed;                       /* 삭제되었으면 true, 아니면 false. */
+	int deny_write_cnt;                 /* 0: 쓰기 허용, >0: 쓰기 금지. */
+	struct inode_disk data;             /* inode 내용. */
 };
 
-/* Returns the disk sector that contains byte offset POS within
- * INODE.
- * Returns -1 if INODE does not contain data for a byte at offset
- * POS. */
+/* INODE 안에서 바이트 오프셋 POS를 포함하는 디스크 섹터를 반환합니다.
+ * INODE에 오프셋 POS의 바이트에 대한 데이터가 없으면 -1을 반환합니다. */
 static disk_sector_t
 byte_to_sector (const struct inode *inode, off_t pos) {
 	ASSERT (inode != NULL);
@@ -49,21 +46,19 @@ byte_to_sector (const struct inode *inode, off_t pos) {
 		return -1;
 }
 
-/* List of open inodes, so that opening a single inode twice
- * returns the same `struct inode'. */
+/* 단일 inode를 두 번 열어도 같은 `struct inode'를 반환하도록 하는 열려 있는 inode 목록. */
 static struct list open_inodes;
 
-/* Initializes the inode module. */
+/* inode 모듈을 초기화합니다. */
 void
 inode_init (void) {
 	list_init (&open_inodes);
 }
 
-/* Initializes an inode with LENGTH bytes of data and
- * writes the new inode to sector SECTOR on the file system
- * disk.
- * Returns true if successful.
- * Returns false if memory or disk allocation fails. */
+/* LENGTH 바이트의 데이터로 inode를 초기화하고
+ * 새 inode를 파일 시스템 디스크의 섹터 SECTOR에 기록합니다.
+ * 성공하면 true를 반환합니다.
+ * 메모리 또는 디스크 할당에 실패하면 false를 반환합니다. */
 bool
 inode_create (disk_sector_t sector, off_t length) {
 	struct inode_disk *disk_inode = NULL;
@@ -71,8 +66,7 @@ inode_create (disk_sector_t sector, off_t length) {
 
 	ASSERT (length >= 0);
 
-	/* If this assertion fails, the inode structure is not exactly
-	 * one sector in size, and you should fix that. */
+	/* 이 assertion이 실패하면 inode 구조체의 크기가 정확히 한 섹터가 아니므로, 이를 수정해야 합니다. */
 	ASSERT (sizeof *disk_inode == DISK_SECTOR_SIZE);
 
 	disk_inode = calloc (1, sizeof *disk_inode);
@@ -96,15 +90,14 @@ inode_create (disk_sector_t sector, off_t length) {
 	return success;
 }
 
-/* Reads an inode from SECTOR
- * and returns a `struct inode' that contains it.
- * Returns a null pointer if memory allocation fails. */
+/* SECTOR에서 inode를 읽어 그 내용을 담은 `struct inode'를 반환합니다.
+ * 메모리 할당에 실패하면 null pointer를 반환합니다. */
 struct inode *
 inode_open (disk_sector_t sector) {
 	struct list_elem *e;
 	struct inode *inode;
 
-	/* Check whether this inode is already open. */
+	/* 이 inode가 이미 열려 있는지 확인합니다. */
 	for (e = list_begin (&open_inodes); e != list_end (&open_inodes);
 			e = list_next (e)) {
 		inode = list_entry (e, struct inode, elem);
@@ -114,12 +107,12 @@ inode_open (disk_sector_t sector) {
 		}
 	}
 
-	/* Allocate memory. */
+	/* 메모리를 할당합니다. */
 	inode = malloc (sizeof *inode);
 	if (inode == NULL)
 		return NULL;
 
-	/* Initialize. */
+	/* 초기화합니다. */
 	list_push_front (&open_inodes, &inode->elem);
 	inode->sector = sector;
 	inode->open_cnt = 1;
@@ -129,7 +122,7 @@ inode_open (disk_sector_t sector) {
 	return inode;
 }
 
-/* Reopens and returns INODE. */
+/* INODE를 다시 열어 반환합니다. */
 struct inode *
 inode_reopen (struct inode *inode) {
 	if (inode != NULL)
@@ -137,27 +130,27 @@ inode_reopen (struct inode *inode) {
 	return inode;
 }
 
-/* Returns INODE's inode number. */
+/* INODE의 inode 번호를 반환합니다. */
 disk_sector_t
 inode_get_inumber (const struct inode *inode) {
 	return inode->sector;
 }
 
-/* Closes INODE and writes it to disk.
- * If this was the last reference to INODE, frees its memory.
- * If INODE was also a removed inode, frees its blocks. */
+/* INODE를 닫고 디스크에 기록합니다.
+ * 이것이 INODE에 대한 마지막 참조이면 메모리를 해제합니다.
+ * INODE가 제거된 inode이기도 하면 해당 블록을 해제합니다. */
 void
 inode_close (struct inode *inode) {
-	/* Ignore null pointer. */
+	/* null 포인터는 무시합니다. */
 	if (inode == NULL)
 		return;
 
-	/* Release resources if this was the last opener. */
+	/* 이것이 마지막 opener라면 자원을 해제합니다. */
 	if (--inode->open_cnt == 0) {
-		/* Remove from inode list and release lock. */
+		/* inode 목록에서 제거하고 잠금을 해제합니다. */
 		list_remove (&inode->elem);
 
-		/* Deallocate blocks if removed. */
+		/* 제거되었다면 블록을 해제합니다. */
 		if (inode->removed) {
 			free_map_release (inode->sector, 1);
 			free_map_release (inode->data.start,
@@ -168,17 +161,15 @@ inode_close (struct inode *inode) {
 	}
 }
 
-/* Marks INODE to be deleted when it is closed by the last caller who
- * has it open. */
+/* INODE를 열고 있는 마지막 호출자가 닫을 때 삭제되도록 표시합니다. */
 void
 inode_remove (struct inode *inode) {
 	ASSERT (inode != NULL);
 	inode->removed = true;
 }
 
-/* Reads SIZE bytes from INODE into BUFFER, starting at position OFFSET.
- * Returns the number of bytes actually read, which may be less
- * than SIZE if an error occurs or end of file is reached. */
+/* OFFSET 위치부터 시작하여 INODE에서 BUFFER로 SIZE 바이트를 읽습니다.
+ * 실제로 읽은 바이트 수를 반환하며, 오류가 발생하거나 파일 끝에 도달하면 SIZE보다 작을 수 있습니다. */
 off_t
 inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	uint8_t *buffer = buffer_;
@@ -186,26 +177,25 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	uint8_t *bounce = NULL;
 
 	while (size > 0) {
-		/* Disk sector to read, starting byte offset within sector. */
+		/* 읽을 디스크 섹터, 섹터 내 시작 바이트 오프셋. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
-		/* Bytes left in inode, bytes left in sector, lesser of the two. */
+		/* inode에 남은 바이트 수, 섹터에 남은 바이트 수, 둘 중 더 작은 값. */
 		off_t inode_left = inode_length (inode) - offset;
 		int sector_left = DISK_SECTOR_SIZE - sector_ofs;
 		int min_left = inode_left < sector_left ? inode_left : sector_left;
 
-		/* Number of bytes to actually copy out of this sector. */
+		/* 이 섹터에서 실제로 복사할 바이트 수. */
 		int chunk_size = size < min_left ? size : min_left;
 		if (chunk_size <= 0)
 			break;
 
 		if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) {
-			/* Read full sector directly into caller's buffer. */
+			/* 전체 섹터를 호출자의 버퍼로 직접 읽어들입니다. */
 			disk_read (filesys_disk, sector_idx, buffer + bytes_read); 
 		} else {
-			/* Read sector into bounce buffer, then partially copy
-			 * into caller's buffer. */
+			/* 섹터를 bounce buffer에 읽은 다음 호출자의 버퍼로 부분 복사합니다. */
 			if (bounce == NULL) {
 				bounce = malloc (DISK_SECTOR_SIZE);
 				if (bounce == NULL)
@@ -215,7 +205,7 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 			memcpy (buffer + bytes_read, bounce + sector_ofs, chunk_size);
 		}
 
-		/* Advance. */
+		/* 다음으로 이동합니다. */
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_read += chunk_size;
@@ -225,11 +215,10 @@ inode_read_at (struct inode *inode, void *buffer_, off_t size, off_t offset) {
 	return bytes_read;
 }
 
-/* Writes SIZE bytes from BUFFER into INODE, starting at OFFSET.
- * Returns the number of bytes actually written, which may be
- * less than SIZE if end of file is reached or an error occurs.
- * (Normally a write at end of file would extend the inode, but
- * growth is not yet implemented.) */
+/* OFFSET 위치부터 시작하여 BUFFER의 SIZE 바이트를 INODE에 기록합니다.
+ * 실제로 기록된 바이트 수를 반환하며, 파일 끝에 도달하거나 오류가 발생하면 SIZE보다 작을 수 있습니다.
+ * (보통 파일 끝에서의 쓰기는 inode를 확장하지만,
+ * 확장은 아직 구현되지 않았습니다.) */
 off_t
 inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		off_t offset) {
@@ -241,34 +230,33 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 		return 0;
 
 	while (size > 0) {
-		/* Sector to write, starting byte offset within sector. */
+		/* 기록할 디스크 섹터, 섹터 내 시작 바이트 오프셋. */
 		disk_sector_t sector_idx = byte_to_sector (inode, offset);
 		int sector_ofs = offset % DISK_SECTOR_SIZE;
 
-		/* Bytes left in inode, bytes left in sector, lesser of the two. */
+		/* inode에 남은 바이트 수, 섹터에 남은 바이트 수, 둘 중 더 작은 값. */
 		off_t inode_left = inode_length (inode) - offset;
 		int sector_left = DISK_SECTOR_SIZE - sector_ofs;
 		int min_left = inode_left < sector_left ? inode_left : sector_left;
 
-		/* Number of bytes to actually write into this sector. */
+		/* 이 섹터에 실제로 기록할 바이트 수. */
 		int chunk_size = size < min_left ? size : min_left;
 		if (chunk_size <= 0)
 			break;
 
 		if (sector_ofs == 0 && chunk_size == DISK_SECTOR_SIZE) {
-			/* Write full sector directly to disk. */
+			/* 전체 섹터를 디스크에 직접 기록합니다. */
 			disk_write (filesys_disk, sector_idx, buffer + bytes_written); 
 		} else {
-			/* We need a bounce buffer. */
+			/* bounce buffer가 필요합니다. */
 			if (bounce == NULL) {
 				bounce = malloc (DISK_SECTOR_SIZE);
 				if (bounce == NULL)
 					break;
 			}
 
-			/* If the sector contains data before or after the chunk
-			   we're writing, then we need to read in the sector
-			   first.  Otherwise we start with a sector of all zeros. */
+			/* 섹터에 우리가 기록하는 청크 앞이나 뒤에 데이터가 있으면, 먼저 그 섹터를 읽어 와야 합니다. 그렇지 않으면 모든 바이트가 0인
+			   섹터에서 시작합니다. */
 			if (sector_ofs > 0 || chunk_size < sector_left) 
 				disk_read (filesys_disk, sector_idx, bounce);
 			else
@@ -277,7 +265,7 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 			disk_write (filesys_disk, sector_idx, bounce); 
 		}
 
-		/* Advance. */
+		/* 다음으로 이동합니다. */
 		size -= chunk_size;
 		offset += chunk_size;
 		bytes_written += chunk_size;
@@ -287,8 +275,8 @@ inode_write_at (struct inode *inode, const void *buffer_, off_t size,
 	return bytes_written;
 }
 
-/* Disables writes to INODE.
-   May be called at most once per inode opener. */
+/* INODE에 대한 쓰기를 비활성화합니다.
+   inode opener당 최대 한 번만 호출할 수 있습니다. */
 	void
 inode_deny_write (struct inode *inode) 
 {
@@ -296,9 +284,9 @@ inode_deny_write (struct inode *inode)
 	ASSERT (inode->deny_write_cnt <= inode->open_cnt);
 }
 
-/* Re-enables writes to INODE.
- * Must be called once by each inode opener who has called
- * inode_deny_write() on the inode, before closing the inode. */
+/* INODE에 대한 쓰기를 다시 활성화합니다.
+ * inode에서 `inode_deny_write()`를 호출한 각 inode opener는
+ * inode를 닫기 전에 한 번씩 이 함수를 호출해야 합니다. */
 void
 inode_allow_write (struct inode *inode) {
 	ASSERT (inode->deny_write_cnt > 0);
@@ -306,7 +294,7 @@ inode_allow_write (struct inode *inode) {
 	inode->deny_write_cnt--;
 }
 
-/* Returns the length, in bytes, of INODE's data. */
+/* INODE 데이터의 길이를 바이트 단위로 반환합니다. */
 off_t
 inode_length (const struct inode *inode) {
 	return inode->data.length;
