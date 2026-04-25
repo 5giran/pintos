@@ -43,6 +43,8 @@ timer_init (void) {
 	outb (0x40, count >> 8);
 
 	intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+
+	struct list sleep_list;
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -90,11 +92,26 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	enum intr_level old_level;
+
+	// 잠자는 시간인 ticks가 0 이하면 잠을 잘 수가 없음.
+	if (ticks <= 0) {
+		return;
+	}
+
+	int64_t start = timer_ticks (); // 현재 타이머 tick값 저장: 기준 시간
+	int64_t wakeup_ticks = start + ticks; // 깨어날 절대 시간
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// 잠든 시간 이후로 몇 틱 지났는지 계산 - 주어진 틱만큼 지나지 않았다면
+	while (timer_elapsed (start) < ticks) // 아직 깰 때가 안됐다면
+		old_level = intr_disable();
+		// thread를 sleep list에 넣어줘야돼 (wakeup_ticks 오름차순으로)
+		thread_block();
+		
+		intr_set_level(old_level); // intr_enable() 쓰는건 위험하다. (문서 정리 필요)
+		
+
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -120,8 +137,8 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-/* Timer interrupt handler. */
+
+/* 타이머 인터럽트 핸들러. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
