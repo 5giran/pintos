@@ -88,7 +88,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int64_t wakeup_ticks;								/* 스레드가 잠들었다가 일어날 절대 시각. */
+	int64_t wakeup_ticks;								/* 잠든 스레드가 깨어날 수 있는 최소 절대 tick. */
 
 	/* thread.c와 synch.c가 공유한다. */
 	struct list_elem elem;              /* list 원소. */
