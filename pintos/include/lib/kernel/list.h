@@ -123,6 +123,11 @@ typedef bool list_less_func (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux);
 
+/* 리스트의 정렬 비교 함수 */
+bool thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux);
+bool wakeup_ticks_less(const struct list_elem *a, const struct list_elem *b, void *aux);
+
+
 /* 정렬된 원소를 가진 리스트에 대한 연산. */
 void list_sort (struct list *,
                 list_less_func *, void *aux);
