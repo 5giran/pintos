@@ -2,17 +2,27 @@
 
 ## 1. 맥락
 
-이번 구현에서는 기본 priority scheduling 위에 semaphore와 condition variable의 priority-aware 동작을 추가했다. 기존 priority scheduling은 `ready_list`를 priority 내림차순으로 유지하고, `thread_create()`, `thread_yield()`, `thread_set_priority()`에서 선점 여부를 판단하는 구조였다.
+이번 구현에서는 기존 priority scheduling 위에 semaphore와 condition variable의 priority-aware 동작을 추가했다. 기본 priority scheduling은 `ready_list`를 priority 내림차순으로 유지하고, `thread_create()`, `thread_yield()`, `thread_set_priority()`에서 더 높은 priority thread에게 CPU를 양보하도록 만든 상태였다.
 
-하지만 semaphore와 condition variable은 thread가 BLOCKED 상태로 들어갔다가 다시 READY 상태로 돌아오는 핵심 경로다. 따라서 `sema_down()`에서 기다리는 thread들의 순서, `sema_up()`에서 깨울 thread 선택, `cond_signal()`에서 condition waiter를 깨우는 순서가 priority 기준을 따라야 `priority-sema`, `priority-condvar` 테스트를 통과할 수 있다.
+하지만 `priority-sema`, `priority-condvar` 테스트는 READY 상태의 thread 선택만으로는 통과할 수 없다. thread가 semaphore 또는 condition variable에서 BLOCKED 상태로 대기하다가 다시 READY 상태가 되는 경로에서도 priority 순서가 유지되어야 한다.
 
-이번 변경은 `feature/p1-priority-scheduling` 브랜치의 다음 구현 커밋들을 통해 진행되었다.
+이번 구현의 핵심은 다음 세 가지다.
+
+```text
+1. semaphore waiters를 priority 순서로 관리한다.
+2. sema_up()은 가장 높은 priority waiter를 깨우고, 필요한 경우에만 선점시킨다.
+3. condition waiters는 semaphore_elem 기준으로 정렬하되, 내부 semaphore.waiters가 비어 있는 시점을 고려한다.
+```
+
+이번 변경은 `feature/p1-priority-scheduling` 브랜치의 다음 구현 커밋들을 기준으로 정리했다.
 
 ```text
 e3e4c6f fix(priority): thread_unblock() to pass the sema test, cond_wait() and added new comparison func to pass the condvar test
 4a3169b fix(priority): Fix priority scheduling in semaphores and condition variables
 ca1ad72 fix(priority): update current scheduling changes (sema, condition variable
 6a8306d feat(priority): Implemented priority scheduling
+b030771 refactor(priority): added comments for new code lines and new comparison function signature in list.h
+0bf6607 refactor(priority): added new header function in list.h
 ```
 
 ## 2. 코드 수정한 부분
@@ -26,9 +36,18 @@ list_insert_ordered(&sema->waiters, &thread_current()->elem,
                     thread_priority_compare, NULL);
 ```
 
-`sema->waiters`는 `struct thread`의 `elem`을 담는 리스트다. 따라서 `thread_priority_compare()`를 그대로 사용할 수 있다. 이 변경으로 여러 thread가 같은 semaphore에서 block되었을 때, `sema_up()`은 가장 높은 priority thread를 먼저 깨울 수 있다.
+`sema->waiters`는 `struct thread`의 `elem`을 담는 리스트다. 따라서 `thread_priority_compare()`를 그대로 사용할 수 있다. 이 변경으로 여러 thread가 같은 semaphore에서 block되었을 때, waiters의 front에는 가장 높은 priority thread가 위치한다.
 
-`sema_up()`에서는 waiters의 front를 꺼내 `thread_unblock()`으로 READY 상태로 전환한다. 이후 `sema->value` 증가와 interrupt level 복구까지 끝낸 뒤, 실제로 깨운 thread가 현재 thread보다 priority가 높은 경우에만 선점 처리를 수행한다.
+`sema_up()`에서는 `sema->waiters`의 front를 꺼내 `thread_unblock()`으로 READY 상태로 전환한다.
+
+```c
+if (!list_empty(&sema->waiters)) {
+  t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+  thread_unblock(t);
+}
+```
+
+이후 `sema->value` 증가와 interrupt level 복구까지 끝낸 뒤, 실제로 깨운 thread가 현재 thread보다 priority가 높은 경우에만 선점 처리를 수행한다.
 
 ```c
 if (t != NULL && t->priority > thread_current()->priority) {
@@ -39,9 +58,9 @@ if (t != NULL && t->priority > thread_current()->priority) {
 }
 ```
 
-초기에는 `thread_unblock()` 안에서 바로 yield하는 방향도 고려했지만, 그 경우 `sema_up()`의 상태 갱신이 끝나기 전에 깨운 thread가 실행될 수 있다. 최종 구현에서는 semaphore 상태 변경을 먼저 완료하고, 호출 문맥에 따라 일반 thread context에서는 `thread_yield()`, interrupt context에서는 `intr_yield_on_return()`을 사용하도록 정리했다.
+초기에는 `thread_unblock()` 안에서 바로 yield하는 방식도 고려했지만, 그렇게 하면 `sema_up()`의 상태 갱신이 끝나기 전에 깨운 thread가 실행될 수 있다. 특히 `sema->value++`가 완료되기 전에 깨운 thread가 `sema_down()`의 while 조건을 다시 볼 수 있으므로, 최종 구현에서는 semaphore 상태 변경을 먼저 완료한 뒤 선점 여부를 판단했다.
 
-`struct semaphore_elem`에는 condition waiter에 대응되는 thread를 저장하는 포인터를 추가했다.
+`struct semaphore_elem`에는 condition waiter에 대응되는 thread 포인터를 추가했다.
 
 ```c
 struct semaphore_elem
@@ -57,12 +76,21 @@ condition variable의 `waiters` 리스트에는 `struct thread`가 직접 들어
 이를 위해 `semaphore_priority_compare()`를 추가했다.
 
 ```c
-return sa->thread->priority > sb->thread->priority;
+bool
+semaphore_priority_compare(const struct list_elem *a,
+                           const struct list_elem *b,
+                           void *aux UNUSED)
+{
+  const struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+  const struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+  return sa->thread->priority > sb->thread->priority;
+}
 ```
 
-비교 함수가 `semaphore.waiters` 내부를 보지 않고 `semaphore_elem.thread`를 보는 이유는 삽입 시점 때문이다. `cond_wait()`에서 `cond->waiters`에 `waiter.elem`을 넣는 시점에는 아직 `sema_down(&waiter.semaphore)`이 실행되지 않았으므로, `waiter.semaphore.waiters`는 비어 있을 수 있다. 따라서 삽입 전에 알 수 있는 현재 thread 포인터를 저장해 비교 기준으로 사용했다.
+비교 함수가 `semaphore.waiters` 내부를 보지 않고 `semaphore_elem.thread`를 보는 이유는 삽입 시점 때문이다. `cond_wait()`에서 `cond->waiters`에 `waiter.elem`을 넣는 시점에는 아직 `sema_down(&waiter.semaphore)`이 실행되지 않았다. 따라서 `waiter.semaphore.waiters`는 비어 있을 수 있다. 삽입 전에 확실히 알 수 있는 현재 thread 포인터를 `waiter.thread`에 저장하고, 그 thread의 priority를 비교 기준으로 사용했다.
 
-`cond_wait()`에서는 다음 순서를 유지했다.
+`cond_wait()`의 최종 흐름은 다음과 같다.
 
 ```text
 1. 개인 semaphore를 value 0으로 초기화한다.
@@ -73,27 +101,60 @@ return sa->thread->priority > sb->thread->priority;
 6. signal을 받아 깨어나면 lock을 다시 acquire한다.
 ```
 
-이 구조에서 `cond->waiters`는 "condition에서 기다리는 waiter wrapper들의 리스트"이고, 각 wrapper 안의 개인 semaphore가 실제 thread를 block/unblock한다.
-
-`cond_signal()`에서는 `cond->waiters`에서 priority가 가장 높은 `semaphore_elem`을 하나 꺼낸 뒤, 그 내부 semaphore에 `sema_up()`을 호출하도록 정리했다.
+코드상 핵심 부분은 다음과 같다.
 
 ```c
-struct semaphore_elem *waiter = list_entry(list_pop_front(&cond->waiters),
-                                           struct semaphore_elem, elem);
-sema_up(&waiter->semaphore);
+sema_init(&waiter.semaphore, 0);
+waiter.thread = thread_current();
+list_insert_ordered(&cond->waiters, &waiter.elem,
+                    semaphore_priority_compare, NULL);
+
+lock_release(lock);
+sema_down(&waiter.semaphore);
+lock_acquire(lock);
 ```
 
-기존 디버깅 과정에서 `list_pop_front()`가 중복 호출되면 signal 대상이 아닌 waiter까지 리스트에서 제거될 수 있었기 때문에, 최종 구현에서는 하나의 waiter만 pop하도록 했다.
+`cond_signal()`에서는 `cond->waiters`에서 priority가 가장 높은 `semaphore_elem`을 하나 꺼낸 뒤, 그 내부 semaphore에 `sema_up()`을 호출한다.
+
+```c
+if (!list_empty(&cond->waiters)) {
+  struct semaphore_elem *waiter =
+      list_entry(list_pop_front(&cond->waiters),
+                 struct semaphore_elem, elem);
+  sema_up(&waiter->semaphore);
+}
+```
+
+`list_pop_front()`를 한 번만 호출하도록 정리한 이유는 signal 대상이 아닌 waiter가 condition waiters에서 사라지는 문제를 막기 위해서다.
 
 ### `pintos/threads/thread.c`
 
 `thread_priority_compare()`는 `ready_list`뿐 아니라 semaphore waiters에서도 사용해야 하므로 파일 내부 `static` 함수가 아니라 외부에서 참조 가능한 함수로 변경했다.
 
 ```c
-bool thread_priority_compare(const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux UNUSED)
+bool
+thread_priority_compare(const struct list_elem *a,
+                        const struct list_elem *b,
+                        void *aux UNUSED)
+{
+  const struct thread *ta = list_entry(a, struct thread, elem);
+  const struct thread *tb = list_entry(b, struct thread, elem);
+
+  return ta->priority > tb->priority;
+}
 ```
+
+이 함수는 `thread.elem`으로 구성된 리스트에서 사용할 수 있다.
+
+```text
+ready_list:
+  thread.elem 리스트
+
+sema->waiters:
+  thread.elem 리스트
+```
+
+반대로 `cond->waiters`는 `semaphore_elem.elem` 리스트이므로 `thread_priority_compare()`를 사용할 수 없다. 이 차이 때문에 `semaphore_priority_compare()`가 별도로 필요하다.
 
 `thread_unblock()`은 BLOCKED thread를 READY 상태로 만들고 `ready_list`에 priority 순서로 삽입한다.
 
@@ -104,9 +165,41 @@ t->status = THREAD_READY;
 
 선점 판단은 `thread_unblock()` 내부에서 하지 않는다. `thread_unblock()`은 semaphore, lock, condition variable, timer interrupt 등 다양한 문맥에서 호출될 수 있으므로, 호출자가 자기 자료구조 갱신을 마친 뒤 안전한 시점에 양보 여부를 판단하는 구조가 더 안정적이다.
 
+`thread_create()`에서는 새 thread를 READY 상태로 만든 뒤, 새 thread가 현재 thread보다 priority가 높으면 즉시 양보한다.
+
+```c
+thread_unblock(t);
+
+if (t->priority > thread_current()->priority)
+  thread_yield();
+```
+
+`thread_yield()`에서는 현재 thread를 다시 ready list에 넣을 때도 priority 순서를 유지한다.
+
+```c
+if (curr != idle_thread)
+  list_insert_ordered(&ready_list, &curr->elem,
+                      thread_priority_compare, NULL);
+```
+
+`thread_set_priority()`에서는 현재 thread의 priority를 갱신한 뒤, ready list front의 priority가 현재 thread보다 높으면 CPU를 양보한다.
+
+```c
+curr->priority = new_priority;
+
+if (!list_empty(&ready_list)) {
+  struct thread *front = list_entry(list_front(&ready_list),
+                                   struct thread, elem);
+  if (front->priority > curr->priority)
+    thread_yield();
+}
+```
+
 ### `pintos/include/lib/kernel/list.h`
 
-`synch.c`와 `timer.c`에서도 priority 및 wakeup tick 비교 함수를 사용할 수 있도록 비교 함수 선언을 추가했다.
+정렬 삽입에 사용하는 비교 함수들을 여러 파일에서 사용할 수 있도록 `list.h`에 선언을 추가했다.
+
+최신 코드 기준 선언은 다음과 같다.
 
 ```c
 bool thread_priority_compare(const struct list_elem *a,
@@ -115,7 +208,27 @@ bool thread_priority_compare(const struct list_elem *a,
 bool wakeup_ticks_less(const struct list_elem *a,
                        const struct list_elem *b,
                        void *aux);
+bool semaphore_priority_compare(const struct list_elem *a,
+                                const struct list_elem *b,
+                                void *aux UNUSED);
 ```
+
+각 함수의 사용 대상은 다음과 같다.
+
+```text
+thread_priority_compare():
+  thread.elem 리스트 정렬에 사용한다.
+  ready_list와 semaphore waiters가 여기에 해당한다.
+
+wakeup_ticks_less():
+  timer sleep_list를 wakeup_ticks 기준으로 정렬할 때 사용한다.
+
+semaphore_priority_compare():
+  semaphore_elem.elem 리스트 정렬에 사용한다.
+  condition variable의 waiters가 여기에 해당한다.
+```
+
+이번 구현 로그에서 중요한 최신 변경점은 `semaphore_priority_compare()` 선언까지 `list.h`에 추가되었다는 점이다. `cond_wait()`는 `synch.c` 안에서 이 비교 함수를 직접 사용하지만, 프로젝트 공용 비교 함수 선언을 `list.h`에 모아 두면서 condition waiters 정렬 함수도 함께 노출되었다.
 
 ## 3. 주요 의사결정
 
@@ -143,6 +256,12 @@ ready_list에 priority 순서로 삽입한다.
 `cond->waiters`에 `waiter.elem`을 삽입하는 시점에는 `waiter.semaphore.waiters`가 아직 비어 있다. 이 리스트의 front thread를 기준으로 비교하면 `list_front()` ASSERT가 발생할 수 있다.
 
 최종 구현에서는 `waiter.thread = thread_current()`로 현재 thread를 저장하고, 이 포인터가 가리키는 thread의 priority를 비교 기준으로 사용했다.
+
+### `sema_up()`은 조건이 맞을 때만 양보한다
+
+`sema_up()`에서 waiter를 깨웠다고 해서 항상 context switch가 필요한 것은 아니다. 실제로 깨운 thread가 없거나, 깨운 thread의 priority가 현재 thread보다 낮거나 같으면 현재 thread가 계속 실행되어도 priority scheduling invariant가 깨지지 않는다.
+
+따라서 최종 구현에서는 `t != NULL && t->priority > thread_current()->priority` 조건을 만족할 때만 양보한다.
 
 ## 4. 테스트 확인 범위
 
