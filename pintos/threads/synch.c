@@ -37,6 +37,8 @@ void sema_init(struct semaphore *sema, unsigned value)
 	list_init(&sema->waiters);
 }
 
+
+
 /* semaphore에 대한 down 또는 "P" 연산.
    SEMA의 값이 양수가 될 때까지 기다린 뒤 원자적으로 감소시킨다.
    이 함수는 sleep할 수 있으므로 interrupt handler 안에서 호출하면 안 된다.
@@ -89,23 +91,39 @@ bool sema_try_down(struct semaphore *sema)
 void sema_up(struct semaphore *sema)
 {
 	enum intr_level old_level;
+	// 깨울 스레드 포인터 초기화
+	struct thread *t = NULL;
 
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
+	// 깨울 스레드가 있다면 깨운다.
 	if (!list_empty (&sema->waiters)) {
     	// list_sort (&sema->waiters, thread_priority_compare, NULL);
-    	thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+    	// 깨울 스레드 선택한다. 우선순위가 가장 높은 스레드를 선택한다.
+		t = list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem);
+		// 깨운다.
+		thread_unblock (t);
   	}
+	
+	// if (!list_empty(&sema->waiters)) {
+	// 	struct thread *t;
+	// 	t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
+	// 	thread_unblock(t);
+	// }
 	sema->value++;
 	intr_set_level(old_level);
 
-	if(intr_context()) {
-		intr_yield_on_return();
-	}
-	else {
-		thread_yield();
+	// 깨운 스레드가 현재 스레드보다 우선순위가 높다면 yield한다.
+	if (t != NULL && t->priority > thread_current()->priority) {
+		// 인터럽트 컨텍스트가 아니라면 thread_yield()를 호출한다.
+		if (!intr_context()) {
+			thread_yield();
+		}
+		else {
+			intr_yield_on_return();
+		}	
 	}
 }
 
@@ -265,10 +283,14 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
+	// waiter.semaphore.value = 0 으로 초기화
 	sema_init(&waiter.semaphore, 0);
+
+	// wait하는 thread 정보를 waiter에 저장한다.
 	waiter.thread = thread_current ();
 	// waiter.elem = lock->holder->elem;
 	// list_insert_ordered(&cond->waiters, lock->holder, semaphore_priority_compare, NULL);
+	// wait하는 thread를 cond->waiters 리스트에 우선순위 순서로 삽입한다.
 	list_insert_ordered(&cond->waiters, &waiter.elem, semaphore_priority_compare, NULL);
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
@@ -298,10 +320,6 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 							struct semaphore_elem, elem)
 					 ->semaphore);
 	// list_pop_front(&cond->waiters);
-	// if(!intr_context())
-	// {
-	// 	thread_yield();
-	// }
 }
 
 /* COND에서 기다리는 모든 thread를 깨운다(있다면, LOCK으로 보호됨).
