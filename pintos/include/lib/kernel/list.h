@@ -129,7 +129,7 @@ typedef bool list_less_func (const struct list_elem *a,
    semaphore_priority_compare()는 semaphore_elem.elem 리스트(condition waiters) 정렬에 사용한다. */
 bool thread_priority_compare (const struct list_elem *a, const struct list_elem *b, void *aux);
 bool wakeup_ticks_less(const struct list_elem *a, const struct list_elem *b, void *aux);
-bool semaphore_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+bool semaphore_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux);
 
 /* 정렬된 원소를 가진 리스트에 대한 연산. */
 void list_sort (struct list *,
