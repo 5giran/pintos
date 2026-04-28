@@ -93,11 +93,20 @@ void sema_up(struct semaphore *sema)
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
-	if (!list_empty(&sema->waiters))
-		thread_unblock(list_entry(list_pop_front(&sema->waiters),
-								  struct thread, elem));
+	if (!list_empty (&sema->waiters)) {
+    	// list_sort (&sema->waiters, thread_priority_compare, NULL);
+    	thread_unblock (list_entry (list_pop_front (&sema->waiters),
+                                struct thread, elem));
+  	}
 	sema->value++;
 	intr_set_level(old_level);
+
+	if(intr_context()) {
+		intr_yield_on_return();
+	}
+	else {
+		thread_yield();
+	}
 }
 
 static void sema_test_helper(void *sema_);
@@ -110,7 +119,6 @@ void sema_self_test(void)
 	struct semaphore sema[2];
 	int i;
 
-	printf("Testing semaphores...");
 	sema_init(&sema[0], 0);
 	sema_init(&sema[1], 0);
 	thread_create("sema-test", PRI_DEFAULT, sema_test_helper, &sema);
@@ -119,7 +127,6 @@ void sema_self_test(void)
 		sema_up(&sema[0]);
 		sema_down(&sema[1]);
 	}
-	printf("done.\n");
 }
 
 /* sema_self_test()에서 사용하는 thread 함수. */
@@ -211,7 +218,21 @@ struct semaphore_elem
 {
 	struct list_elem elem;		/* list 원소. */
 	struct semaphore semaphore; /* 이 semaphore. */
+	struct thread *thread		/* semaphore 내부 waiters에서 기다리는 thread*/
 };
+
+/* semaphore 비교 함수 */
+bool semaphore_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+
+	// list_elem을 실제 thread 구조체 포인터로 변환한다.
+	const struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
+	const struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
+
+	// 우선순위가 높은 스레드가 ready_list의 앞쪽에 오도록 한다.
+	// 같은 우선순위에서는 false가 되므로 FIFO 순서가 유지된다.
+	return sa->thread->priority > sb->thread->priority;
+}
 
 /* condition variable COND를 초기화한다. condition variable은
    어떤 코드가 조건을 signal하고, 협력하는 코드가 그 signal을 받아
@@ -245,13 +266,20 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	sema_init(&waiter.semaphore, 0);
-	waiter.elem = lock->holder->elem;
-	list_insert_ordered(&cond->waiters, lock->holder, thread_priority_compare, NULL);
+	waiter.thread = thread_current ();
+	// waiter.elem = lock->holder->elem;
+	// list_insert_ordered(&cond->waiters, lock->holder, semaphore_priority_compare, NULL);
+	list_insert_ordered(&cond->waiters, &waiter.elem, semaphore_priority_compare, NULL);
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
+	// if (!list_empty(&cond->waiters)) {
+	// 	
+	// }
+	// else {
+	// 	list_push_front(&cond->waiters, &waiter.elem);
+	// }
 	lock_acquire(lock);
 }
-
 /* COND에서 기다리는 thread가 있다면(LOCK으로 보호됨),
    그중 하나를 깨우도록 signal한다. 이 함수를 호출하기 전에
    LOCK을 이미 가지고 있어야 한다.
@@ -265,10 +293,15 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	if (!list_empty(&cond->waiters))
+	
 		sema_up(&list_entry(list_pop_front(&cond->waiters),
 							struct semaphore_elem, elem)
 					 ->semaphore);
-	list_pop_front(&cond->waiters);
+	// list_pop_front(&cond->waiters);
+	// if(!intr_context())
+	// {
+	// 	thread_yield();
+	// }
 }
 
 /* COND에서 기다리는 모든 thread를 깨운다(있다면, LOCK으로 보호됨).

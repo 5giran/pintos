@@ -258,15 +258,6 @@ void thread_unblock(struct thread *t)
 	// thread_priority_compare()를 기준으로 스레드 t를 알맞은 위치에 삽입한다.
 	list_insert_ordered(&ready_list, &t->elem, thread_priority_compare, NULL);
 	t->status = THREAD_READY;
-	// if: 이 스레드가 front라면 current_thread와 우선순위를 비교한다.
-	if (list_entry(list_front(&ready_list), struct thread, elem)->priority < t->priority)
-	{
-		// t가 우선순위가 더 높다면 선점
-		if (t->priority > thread_get_priority())
-		{
-			thread_yield();
-		}
-	}
 	intr_set_level(old_level);
 }
 
