@@ -40,8 +40,8 @@ static struct lock tid_lock;
 /* 제거 대기 중인 스레드 목록. */
 static struct list destruction_req;
 
-// ready_list의 두 원소 중 어떤 스레드가 앞에 와야 하는지 비교한다.
-// aux는 list API 형식을 맞추기 위해 받지만, 우선순위 비교에는 사용하지 않는다.
+// thread.elem으로 구성된 리스트에서 어떤 스레드가 앞에 와야 하는지 비교한다.
+// ready_list와 semaphore waiters는 모두 thread.elem을 담으므로 같은 비교 함수를 공유한다.
 // 우선순위가 같으면 false를 반환하여 기존 삽입 순서를 유지한다.
 bool thread_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
@@ -211,8 +211,8 @@ tid_t thread_create(const char *name, int priority,
 
 	/* run queue에 추가한다. */
 
-	// 더 높은 priority를 가진 스레드가 READY 상태가 되면 현재 스레드가 CPU를 양보하도록 한다.
-	// 이 지점은 보통 인터럽트 컨텍스트가 아니므로 thread_yield()를 직접 호출할 수 있다.
+	// 새 thread를 READY 상태로 만든 뒤, priority가 더 높으면 즉시 선점이 일어나야 한다.
+	// thread_unblock()은 ready_list 삽입만 담당하므로 thread_create()가 안전한 시점에서 양보를 판단한다.
 	thread_unblock(t);
 
 	// 새로 생성된 스레드의 우선순위가 현재 실행 중인 스레드보다 높으면 즉시 양보한다.
@@ -254,8 +254,8 @@ void thread_unblock(struct thread *t)
 	old_level = intr_disable();
 	ASSERT(t->status == THREAD_BLOCKED);
 
-	// ready_list를 항상 우선순위 내림차순으로 정렬되도록 유지한다.
-	// thread_priority_compare()를 기준으로 스레드 t를 알맞은 위치에 삽입한다.
+	// READY 상태가 되는 순간 ready_list의 priority 정렬 invariant를 유지한다.
+	// 선점 여부는 thread_unblock() 호출자가 자기 자료구조 갱신을 끝낸 뒤 판단한다.
 	list_insert_ordered(&ready_list, &t->elem, thread_priority_compare, NULL);
 	t->status = THREAD_READY;
 	intr_set_level(old_level);
@@ -342,9 +342,6 @@ void thread_yield(void)
 // READY 상태의 더 높은 우선순위 스레드에게 바로 CPU를 양보하도록 한다.
 void thread_set_priority(int new_priority)
 {
-	// 중복 처리
-	// thread_current ()->priority = new_priority;
-
 	struct thread *curr = thread_current();
 
 	// 현재 스레드의 우선순위를 새 값으로 갱신한다.

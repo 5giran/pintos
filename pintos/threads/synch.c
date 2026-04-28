@@ -91,33 +91,28 @@ bool sema_try_down(struct semaphore *sema)
 void sema_up(struct semaphore *sema)
 {
 	enum intr_level old_level;
-	// 깨울 스레드 포인터 초기화
 	struct thread *t = NULL;
 
 	ASSERT(sema != NULL);
 
 	old_level = intr_disable();
-	// 깨울 스레드가 있다면 깨운다.
+	/* sema_down()에서 waiters를 priority 내림차순으로 유지하므로
+	   front가 이번 sema_up()에서 깨울 가장 높은 priority thread다. */
 	if (!list_empty (&sema->waiters)) {
-    	// list_sort (&sema->waiters, thread_priority_compare, NULL);
-    	// 깨울 스레드 선택한다. 우선순위가 가장 높은 스레드를 선택한다.
 		t = list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem);
-		// 깨운다.
 		thread_unblock (t);
   	}
-	
-	// if (!list_empty(&sema->waiters)) {
-	// 	struct thread *t;
-	// 	t = list_entry(list_pop_front(&sema->waiters), struct thread, elem);
-	// 	thread_unblock(t);
-	// }
+
+	/* semaphore 상태 갱신을 끝낸 뒤 선점 여부를 판단해야 한다.
+	   thread_unblock() 안에서 바로 yield하면 value 증가 전에 깨운 thread가
+	   다시 sema_down()의 while 조건을 볼 수 있다. */
 	sema->value++;
 	intr_set_level(old_level);
 
-	// 깨운 스레드가 현재 스레드보다 우선순위가 높다면 yield한다.
+	/* 실제로 깨운 thread가 현재 thread보다 높을 때만 양보한다.
+	   interrupt handler 안에서는 직접 yield하지 않고 return 시점 yield를 예약한다. */
 	if (t != NULL && t->priority > thread_current()->priority) {
-		// 인터럽트 컨텍스트가 아니라면 thread_yield()를 호출한다.
 		if (!intr_context()) {
 			thread_yield();
 		}
@@ -236,19 +231,19 @@ struct semaphore_elem
 {
 	struct list_elem elem;		/* list 원소. */
 	struct semaphore semaphore; /* 이 semaphore. */
-	struct thread *thread		/* semaphore 내부 waiters에서 기다리는 thread*/
+	struct thread *thread;		/* cond_wait()를 호출해 이 waiter에 대응되는 thread. */
 };
 
-/* semaphore 비교 함수 */
+/* condition waiters에 들어가는 semaphore_elem을 thread priority 기준으로 비교한다. */
 bool semaphore_priority_compare(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 {
 
-	// list_elem을 실제 thread 구조체 포인터로 변환한다.
+	/* cond->waiters의 elem은 struct thread가 아니라 struct semaphore_elem의 elem이다. */
 	const struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
 	const struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
-	// 우선순위가 높은 스레드가 ready_list의 앞쪽에 오도록 한다.
-	// 같은 우선순위에서는 false가 되므로 FIFO 순서가 유지된다.
+	/* cond_wait()에서 condition waiters에 삽입하는 시점에는
+	   waiter.semaphore.waiters가 아직 비어 있으므로, 저장해 둔 thread 포인터로 비교한다. */
 	return sa->thread->priority > sb->thread->priority;
 }
 
@@ -283,23 +278,20 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(!intr_context());
 	ASSERT(lock_held_by_current_thread(lock));
 
-	// waiter.semaphore.value = 0 으로 초기화
+	/* 각 cond_wait() 호출은 자신을 재우고 깨울 전용 semaphore를 하나 가진다. */
 	sema_init(&waiter.semaphore, 0);
 
-	// wait하는 thread 정보를 waiter에 저장한다.
+	/* condition waiters 정렬에 사용할 thread를 저장한다.
+	   thread.elem은 이후 waiter.semaphore.waiters에 들어가므로 cond->waiters에는 사용할 수 없다. */
 	waiter.thread = thread_current ();
-	// waiter.elem = lock->holder->elem;
-	// list_insert_ordered(&cond->waiters, lock->holder, semaphore_priority_compare, NULL);
-	// wait하는 thread를 cond->waiters 리스트에 우선순위 순서로 삽입한다.
 	list_insert_ordered(&cond->waiters, &waiter.elem, semaphore_priority_compare, NULL);
+
+	/* condition waiters에 먼저 등록한 뒤 lock을 내려놓고 개인 semaphore에서 block된다.
+	   sema_down()이 실행되면 현재 thread의 elem은 waiter.semaphore.waiters에 들어간다. */
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
-	// if (!list_empty(&cond->waiters)) {
-	// 	
-	// }
-	// else {
-	// 	list_push_front(&cond->waiters, &waiter.elem);
-	// }
+
+	/* signal을 받아 깨어난 뒤 monitor 안으로 다시 들어가기 위해 lock을 재획득한다. */
 	lock_acquire(lock);
 }
 /* COND에서 기다리는 thread가 있다면(LOCK으로 보호됨),
@@ -315,11 +307,11 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	if (!list_empty(&cond->waiters))
-	
-		sema_up(&list_entry(list_pop_front(&cond->waiters),
-							struct semaphore_elem, elem)
-					 ->semaphore);
-	// list_pop_front(&cond->waiters);
+	{
+		struct semaphore_elem *waiter = list_entry(list_pop_front(&cond->waiters),
+												   struct semaphore_elem, elem);
+		sema_up(&waiter->semaphore);
+	}
 }
 
 /* COND에서 기다리는 모든 thread를 깨운다(있다면, LOCK으로 보호됨).
