@@ -117,6 +117,7 @@ void sema_up(struct semaphore *sema)
 
 	// 깨운 스레드가 현재 스레드보다 우선순위가 높다면 yield한다.
 	if (t != NULL && t->priority > thread_current()->priority) {
+		// 인터럽트 컨텍스트가 아니라면 thread_yield()를 호출한다.
 		if (!intr_context()) {
 			thread_yield();
 		}
@@ -235,6 +236,8 @@ struct semaphore_elem
 {
 	struct list_elem elem;		/* list 원소. */
 	struct semaphore semaphore; /* 이 semaphore. */
+	// 이걸 넣는 이유는 cond_wait()에서 현재 스레드의 정보를 함께 저장하기 위해서다.
+	struct thread *thread;		/* 이 semaphore를 기다리는 thread. */
 };
 
 /* semaphore 비교 함수 */
@@ -245,11 +248,9 @@ bool semaphore_priority_compare(const struct list_elem *a, const struct list_ele
 	const struct semaphore_elem *sa = list_entry(a, struct semaphore_elem, elem);
 	const struct semaphore_elem *sb = list_entry(b, struct semaphore_elem, elem);
 
-	const struct thread *ta = list_entry (list_front (&sa->semaphore.waiters), struct thread, elem);
-	const struct thread *tb = list_entry (list_front (&sb->semaphore.waiters), struct thread, elem);
 	// 우선순위가 높은 스레드가 ready_list의 앞쪽에 오도록 한다.
 	// 같은 우선순위에서는 false가 되므로 FIFO 순서가 유지된다.
-	return ta->priority > tb->priority;
+	return sa->thread->priority > sb->thread->priority;
 }
 
 /* condition variable COND를 초기화한다. condition variable은
@@ -285,11 +286,13 @@ void cond_wait(struct condition *cond, struct lock *lock)
 
 	// waiter.semaphore.value = 0 으로 초기화
 	sema_init(&waiter.semaphore, 0);
+
+	// wait하는 thread 정보를 waiter에 저장한다.
+	waiter.thread = thread_current ();
 	// waiter.elem = lock->holder->elem;
 	// list_insert_ordered(&cond->waiters, lock->holder, semaphore_priority_compare, NULL);
-	// list_insert_ordered(&cond->waiters, &waiter.elem, semaphore_priority_compare, NULL);
-	
-	list_push_back (&cond->waiters, &waiter.elem);
+	// wait하는 thread를 cond->waiters 리스트에 우선순위 순서로 삽입한다.
+	list_insert_ordered(&cond->waiters, &waiter.elem, semaphore_priority_compare, NULL);
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
 	lock_acquire(lock);
