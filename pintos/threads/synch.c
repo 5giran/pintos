@@ -99,6 +99,7 @@ void sema_up(struct semaphore *sema)
 	/* sema_down()에서 waiters를 priority 내림차순으로 유지하므로
 	   front가 이번 sema_up()에서 깨울 가장 높은 priority thread다. */
 	if (!list_empty (&sema->waiters)) {
+		list_sort(&sema->waiters, thread_priority_compare, NULL);
 		t = list_entry (list_pop_front (&sema->waiters),
                                 struct thread, elem);
 		thread_unblock (t);
@@ -180,12 +181,44 @@ void lock_init(struct lock *lock)
    interrupt는 다시 활성화된다. */
 void lock_acquire(struct lock *lock)
 {
+
+	/* lock 인자가 반드시 유효해야 이후 holder와 semaphore에 접근할 수 있다. */
 	ASSERT(lock != NULL);
+
+	/* lock_acquire()는 block될 수 있으므로 interrupt handler 안에서 호출하면 안 된다. */
 	ASSERT(!intr_context());
+
+	/* Pintos lock은 재귀 획득을 허용하지 않으므로 현재 thread가 이미 들고 있으면 안 된다. */
 	ASSERT(!lock_held_by_current_thread(lock));
 
+	/* donation의 donor가 될 현재 실행 중인 thread를 가져온다. */
+	struct thread *curr = thread_current();
+
+	/* 현재 lock을 이미 들고 있는 thread가 있으면 donation의 직접 receiver가 된다. */
+	struct thread *holder = lock->holder;
+	
+	/* 현재 스레드가 기다리는 lock을 기록한다.
+	   donation 제거와 중첩 기부 체인 추적에서 이 값으로 원인을 구분한다. */
+	curr->wait_lock = lock;
+
+	/* lock이 이미 점유되어 있고 현재 스레드가 holder보다 높을 때만 donation을 시작한다.
+	   보유자 체인으로의 추가 전파는 donate_priority()가 담당한다. */
+	if (holder != NULL) {
+		/* 현재 thread의 priority가 더 높을 때만 holder의 priority를 끌어올릴 필요가 있다. */
+		if (holder->priority < curr->priority) {
+			/* 현재 thread가 lock holder에게 priority를 기부하고, 필요하면 chain 위로 전파한다. */
+			donate_priority (curr, holder);
+		}
+	}
+
+	/* semaphore가 열릴 때까지 대기한다. 깨어나 lock을 얻으면 대기 상태를 해제한다. */
 	sema_down(&lock->semaphore);
-	lock->holder = thread_current();
+
+	/* lock 획득에 성공했으므로 현재 thread는 더 이상 어떤 lock도 기다리지 않는다. */
+	curr->wait_lock = NULL;
+
+	/* semaphore 획득이 끝난 현재 thread를 lock의 새 holder로 기록한다. */
+	lock->holder = curr;
 }
 
 /* LOCK 획득을 시도하고, 성공하면 true, 실패하면 false를 반환한다.
@@ -210,11 +243,24 @@ bool lock_try_acquire(struct lock *lock)
    lock을 해제하려고 시도하는 것은 의미가 없다. */
 void lock_release(struct lock *lock)
 {
+	/* 해제할 lock 인자가 유효한지 확인한다. */
 	ASSERT(lock != NULL);
+
+	/* 현재 thread가 실제로 들고 있는 lock만 해제할 수 있다. */
 	ASSERT(lock_held_by_current_thread(lock));
 
+	/* 이 lock 때문에 받은 donation만 제거한 뒤,
+	   남아 있는 donation과 base priority를 기준으로 유효 우선순위를 다시 계산한다. */
+	remove_donation (lock);
+
+	/* donation 제거 후 현재 thread의 priority를 base priority 또는 남은 donation 기준으로 복구한다. */
+	refresh_priority (thread_current ());
+
+	/* holder를 비운 뒤 semaphore를 올려 waiters 중 하나가 lock 획득을 재시도하게 한다. */
 	lock->holder = NULL;
-	sema_up(&lock->semaphore);
+
+	/* lock을 기다리던 thread 중 하나를 깨워 lock 획득을 다시 시도하게 한다. */
+	sema_up (&lock->semaphore);
 }
 
 /* 현재 thread가 LOCK을 가지고 있으면 true, 아니면 false를 반환한다.
