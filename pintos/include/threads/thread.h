@@ -87,11 +87,17 @@ struct thread {
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* Priority. */
+	int priority;                       /* Effective priority. */
+	int base_priority;									/* Base priority, donation 구현을 위해 추가 */
 	int64_t wakeup_ticks;								/* 잠든 스레드가 깨어날 수 있는 최소 절대 tick. */
 
 	/* thread.c와 synch.c가 공유한다. */
-	struct list_elem elem;              /* list 원소. */
+	struct list_elem elem;              /* ready_list, semaphore waiters 원소. */
+	
+	/* donation 구현을 위해 추가하는 구조체 멤버들 */
+	struct list_elem donation_elem;			/* /* 다른 thread의 donations 리스트에 들어갈 때 쓰는 elem. */
+	struct list donations;							/* /* 나에게 priority를 donation한 thread들의 리스트. */
+	struct lock *wait_lock;							/* 이 스레드가 현재 기다리고 있는 lock의 주소. 없으면 NULL*/
 
 #ifdef USERPROG
 	/* userprog/process.c가 소유한다. */
@@ -119,10 +125,14 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *, void *);
+tid_t thread_create (const char *, int, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
+
+void refresh_priority(struct thread *);
+void donate_priority (struct thread *, struct thread *);
+void remove_donation (struct lock *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
