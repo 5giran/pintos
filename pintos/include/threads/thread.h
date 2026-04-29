@@ -87,17 +87,11 @@ struct thread {
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
-	int priority;                       /* donation이 반영된 유효 우선순위. */
-	int base_priority;									/* donation 제거 후 돌아갈 원래 priority. */
+	int priority;                       /* Priority. */
 	int64_t wakeup_ticks;								/* 잠든 스레드가 깨어날 수 있는 최소 절대 tick. */
 
 	/* thread.c와 synch.c가 공유한다. */
-	struct list_elem elem;              /* ready_list, semaphore waiters 원소. */
-	
-	/* 우선순위 기부 상태. */
-	struct list_elem donation_elem;			/* 이 thread가 다른 thread의 donations 리스트에 들어갈 때 쓰는 elem. */
-	struct list donations;							/* 이 thread에게 priority를 기부한 donor thread들의 목록. */
-	struct lock *wait_lock;							/* 이 thread가 현재 기다리는 lock. 기다리는 lock이 없으면 NULL. */
+	struct list_elem elem;              /* list 원소. */
 
 #ifdef USERPROG
 	/* userprog/process.c가 소유한다. */
@@ -125,20 +119,10 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *, int, thread_func *, void *);
+tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
-
-/* 우선순위 기부 보조 함수들. */
-/* base_priority와 donations를 기준으로 thread의 유효 우선순위를 다시 계산한다. */
-void refresh_priority(struct thread *);
-
-/* donor가 receiver에게 priority를 기부하고 필요한 경우 lock holder chain 위로 전파한다. */
-void donate_priority (struct thread *, struct thread *);
-
-/* 현재 thread가 lock을 해제할 때 해당 lock 때문에 받은 donation을 제거한다. */
-void remove_donation (struct lock *);
 
 struct thread *thread_current (void);
 tid_t thread_tid (void);
