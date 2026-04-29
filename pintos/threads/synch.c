@@ -182,34 +182,43 @@ void lock_init(struct lock *lock)
 void lock_acquire(struct lock *lock)
 {
 
+	/* lock 인자가 반드시 유효해야 이후 holder와 semaphore에 접근할 수 있다. */
 	ASSERT(lock != NULL);
+
+	/* lock_acquire()는 block될 수 있으므로 interrupt handler 안에서 호출하면 안 된다. */
 	ASSERT(!intr_context());
+
+	/* Pintos lock은 재귀 획득을 허용하지 않으므로 현재 thread가 이미 들고 있으면 안 된다. */
 	ASSERT(!lock_held_by_current_thread(lock));
 
-	// 현재 실행 중인 thread를 가져온다.
-	struct thread *curr= thread_current();
-	// donation chain을 따라 올라갈 때 사용할 holder 포인터다.
+	/* donation의 donor가 될 현재 실행 중인 thread를 가져온다. */
+	struct thread *curr = thread_current();
+
+	/* 현재 lock을 이미 들고 있는 thread가 있으면 donation의 직접 receiver가 된다. */
 	struct thread *holder = lock->holder;
 	
-	// 현재 thread가 어떤 lock을 기다리는지 기록한다.
-  // nested donation 전파에서 chain을 따라가기 위해 필요하다.
+	/* 현재 스레드가 기다리는 lock을 기록한다.
+	   donation 제거와 중첩 기부 체인 추적에서 이 값으로 원인을 구분한다. */
 	curr->wait_lock = lock;
 
-	// 이미 누군가 lock을 들고 있으면 donation이 필요할 수 있다.
-  	if (holder != NULL) {
-			// 현재 thread가 직접 기다리는 lock holder에게 donation을 건다.
-			// 1. 조건을 거는 것이 효율적일 거 같다. donor가 receiver보다 우선순위가 높을 때만 donation한다.
-			if (holder->priority < curr->priority) {
-				donate_priority (curr, holder); // donate_priority() 내부에서 연쇄 작용이 일어난다.
-			}
+	/* lock이 이미 점유되어 있고 현재 스레드가 holder보다 높을 때만 donation을 시작한다.
+	   보유자 체인으로의 추가 전파는 donate_priority()가 담당한다. */
+	if (holder != NULL) {
+		/* 현재 thread의 priority가 더 높을 때만 holder의 priority를 끌어올릴 필요가 있다. */
+		if (holder->priority < curr->priority) {
+			/* 현재 thread가 lock holder에게 priority를 기부하고, 필요하면 chain 위로 전파한다. */
+			donate_priority (curr, holder);
+		}
 	}
 
-	// 실제 lock semaphore를 down해서 lock이 풀릴 때까지 기다린다.
+	/* semaphore가 열릴 때까지 대기한다. 깨어나 lock을 얻으면 대기 상태를 해제한다. */
 	sema_down(&lock->semaphore);
-	// lock을 획득했으므로 더 이상 기다리는 lock은 없다.
-  	curr->wait_lock = NULL;
-  	// 이제 이 lock의 holder는 현재 thread가 된다.
- 	lock->holder = curr;
+
+	/* lock 획득에 성공했으므로 현재 thread는 더 이상 어떤 lock도 기다리지 않는다. */
+	curr->wait_lock = NULL;
+
+	/* semaphore 획득이 끝난 현재 thread를 lock의 새 holder로 기록한다. */
+	lock->holder = curr;
 }
 
 /* LOCK 획득을 시도하고, 성공하면 true, 실패하면 false를 반환한다.
@@ -234,21 +243,24 @@ bool lock_try_acquire(struct lock *lock)
    lock을 해제하려고 시도하는 것은 의미가 없다. */
 void lock_release(struct lock *lock)
 {
+	/* 해제할 lock 인자가 유효한지 확인한다. */
 	ASSERT(lock != NULL);
+
+	/* 현재 thread가 실제로 들고 있는 lock만 해제할 수 있다. */
 	ASSERT(lock_held_by_current_thread(lock));
 
-	// 이 lock 때문에 받은 donation만 donation 목록에서 제거한다.
-  remove_donation (lock);
+	/* 이 lock 때문에 받은 donation만 제거한 뒤,
+	   남아 있는 donation과 base priority를 기준으로 유효 우선순위를 다시 계산한다. */
+	remove_donation (lock);
 
-  // 남아 있는 donation들과 base priority를 기준으로
- 	// 현재 thread의 effective priority를 다시 계산한다.
- 	refresh_priority (thread_current ());
+	/* donation 제거 후 현재 thread의 priority를 base priority 또는 남은 donation 기준으로 복구한다. */
+	refresh_priority (thread_current ());
 
-  // lock을 더 이상 누구도 들고 있지 않도록 holder를 NULL로 만든다.
-  lock->holder = NULL;
+	/* holder를 비운 뒤 semaphore를 올려 waiters 중 하나가 lock 획득을 재시도하게 한다. */
+	lock->holder = NULL;
 
-  // semaphore를 up해서 lock을 기다리던 thread 하나를 깨운다.
-  sema_up (&lock->semaphore);
+	/* lock을 기다리던 thread 중 하나를 깨워 lock 획득을 다시 시도하게 한다. */
+	sema_up (&lock->semaphore);
 }
 
 /* 현재 thread가 LOCK을 가지고 있으면 true, 아니면 false를 반환한다.
