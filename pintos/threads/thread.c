@@ -90,7 +90,7 @@ void refresh_priority(struct thread *t)
 // 우선순위 기부 함수. donor가 receiver에게 priority를 기부한다.
 void donate_priority (struct thread *donor, struct thread *receiver) {
 	
-	// donor와 receiver가 유효한 스레드인지 확인한다.
+	// donor와 receiver가 유효한 스레드인지 확인한다. -> 이미 호출 시에 확인이 됐는데 안전을 위해 다시 체크?
 	if (donor == NULL || receiver == NULL ) {
 		return;
 	}
@@ -100,10 +100,24 @@ void donate_priority (struct thread *donor, struct thread *receiver) {
 
 	// donation 추가 후 receiver의 effective priority를 다시 계산한다.
 	refresh_priority(receiver);
-	// donor의 우선순위가 receiver보다 높으면, donor의 우선순위를 receiver에 적용한다.
-	// if (donor->priority > receiver->priority) {
-	// 	receiver->priority = donor->priority;
-	// }
+	
+	// 기다리고 있는 lock이 있고, 그 lock을 들고 있는 thread가 있으면 계속 올라간다.
+	// 2. 이게 donate_priority를 한 번 하고 while문을 도는 거기 때문에, 
+	// 내부적으로 연쇄작용이 일어나는 건 donate_priority 안에서 일어나는 게 맞는 거 같다.
+	// 코드 책임 관점에서 보았을 땐... 그런 거 같긴 한데... 뭐가 더 나을까...
+	while (receiver->wait_lock != NULL && receiver->wait_lock->holder != NULL) {
+		// holder가 또 기다리고 있는 lock의 holder로 이동한다.
+		receiver = receiver->wait_lock->holder;
+				
+		// 현재 thread의 priority가 더 높으면 위쪽 holder의 effective priority를 끌어올린다.
+		// 여기서는 같은 donation_elem을 여러 리스트에 넣지 않고 값만 전파한다.
+		if(donor->priority > receiver->priority) {
+			receiver->priority = donor->priority;
+		}
+		else {
+			break;
+		}
+	}
 }
 
 // lock이 해제될 때, 해당 lock에 대해 기부된 우선순위를 제거한다.

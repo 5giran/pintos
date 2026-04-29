@@ -181,41 +181,27 @@ void lock_init(struct lock *lock)
    interrupt는 다시 활성화된다. */
 void lock_acquire(struct lock *lock)
 {
-	// 현재 실행 중인 thread를 가져온다.
-	struct thread *curr= thread_current();
-	// donation chain을 따라 올라갈 때 사용할 holder 포인터다.
-	struct thread *holder;
 
 	ASSERT(lock != NULL);
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
 
+	// 현재 실행 중인 thread를 가져온다.
+	struct thread *curr= thread_current();
+	// donation chain을 따라 올라갈 때 사용할 holder 포인터다.
+	struct thread *holder = lock->holder;
+	
 	// 현재 thread가 어떤 lock을 기다리는지 기록한다.
-  	// nested donation 전파에서 chain을 따라가기 위해 필요하다.
+  // nested donation 전파에서 chain을 따라가기 위해 필요하다.
 	curr->wait_lock = lock;
 
 	// 이미 누군가 lock을 들고 있으면 donation이 필요할 수 있다.
-  	if (lock->holder != NULL) {
-		// 현재 thread가 직접 기다리는 lock holder에게 donation을 건다.
-		// 1. 조건을 거는 것이 효율적일 거 같다. donor가 receiver보다 우선순위가 높을 때만 donation한다.
-		donate_priority (curr, lock->holder);
-
-		// 첫 holder부터 시작해서 donation chain을 따라 올라간다.
-		holder = lock->holder;
-		// 기다리고 있는 lock이 있고, 그 lock을 들고 있는 thread가 있으면 계속 올라간다.
-		// 2. 이게 donate_priority를 한 번 하고 while문을 도는 거기 때문에, 
-		// 내부적으로 연쇄작용이 일어나는 건 donate_priority 안에서 일어나는 게 맞는 거 같다.
-		// 코드 책임 관점에서 보았을 땐... 그런 거 같긴 한데... 뭐가 더 나을까...
-		while (holder->wait_lock != NULL && holder->wait_lock->holder != NULL) {
-			// holder가 또 기다리고 있는 lock의 holder로 이동한다.
-			holder = holder->wait_lock->holder;
-			
-			// 현재 thread의 priority가 더 높으면 위쪽 holder의 effective priority를 끌어올린다.
-      		// 여기서는 같은 donation_elem을 여러 리스트에 넣지 않고 값만 전파한다.
-			if(curr->priority > holder->priority) {
-				holder->priority = curr->priority;
+  	if (holder != NULL) {
+			// 현재 thread가 직접 기다리는 lock holder에게 donation을 건다.
+			// 1. 조건을 거는 것이 효율적일 거 같다. donor가 receiver보다 우선순위가 높을 때만 donation한다.
+			if (holder->priority < curr->priority) {
+				donate_priority (curr, holder); // donate_priority() 내부에서 연쇄 작용이 일어난다.
 			}
-		}
 	}
 
 	// 실제 lock semaphore를 down해서 lock이 풀릴 때까지 기다린다.
