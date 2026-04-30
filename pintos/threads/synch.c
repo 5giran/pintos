@@ -358,7 +358,9 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	if (!list_empty(&cond->waiters))
-	{
+	{	
+		/* donation으로 인해 리스트 정렬이 바뀌었을 수 있기에, pop_front 전에 sort */
+		list_sort(&cond->waiters, semaphore_priority_compare, NULL);
 		struct semaphore_elem *waiter = list_entry(list_pop_front(&cond->waiters),
 												   struct semaphore_elem, elem);
 		sema_up(&waiter->semaphore);
