@@ -24,6 +24,9 @@
    이 값은 수정하지 않는다. */
 #define THREAD_BASIC 0xd42df210
 
+/* 우선순위 기부 전파 제한 깊이 (KAIST Gitbook 추천 숫자) */
+#define DONATION_DEPTH_LIMIT 8
+
 /* THREAD_READY 상태의 스레드 목록.
    실행할 준비는 되었지만 아직 실제로 실행 중이지 않은 스레드들이 들어간다. */
 static struct list ready_list;
@@ -99,9 +102,10 @@ void refresh_priority(struct thread *t)
    RECEIVER가 다른 lock을 기다리고 있으면 lock 보유자 체인을 따라 priority를 위로 전파한다. */
 void donate_priority (struct thread *donor, struct thread *receiver) {
 	/* 잘못된 인자가 들어오면 donation 리스트를 건드리지 않고 종료한다. */
-	if (donor == NULL || receiver == NULL) {
-		return;
-	}
+	ASSERT(donor != NULL);
+	ASSERT(receiver != NULL);
+
+	int depth = 0;
 
 	/* 현재 기부자가 직접 기다리는 lock의 보유자에게만 donation_elem을 연결한다.
 	   같은 donation_elem을 여러 donations 리스트에 동시에 넣을 수 없기 때문이다. */
@@ -109,13 +113,15 @@ void donate_priority (struct thread *donor, struct thread *receiver) {
 
 	/* 직접 donation을 받은 receiver의 유효 우선순위를 즉시 다시 계산한다. */
 	refresh_priority(receiver);
-	
+
 	/* RECEIVER가 다시 다른 lock을 기다리는 중이면 중첩 기부를 전파한다.
 	   위쪽 보유자들은 직접 donation 리스트에 넣지 않고 유효 우선순위만 끌어올린다. */
-	while (receiver->wait_lock != NULL && receiver->wait_lock->holder != NULL) {
+	while (receiver->wait_lock != NULL &&
+				 receiver->wait_lock->holder != NULL &&
+				 depth < DONATION_DEPTH_LIMIT) {
 		/* receiver가 기다리는 lock의 holder로 이동해 다음 전파 대상을 잡는다. */
 		receiver = receiver->wait_lock->holder;
-				
+		depth++;
 		/* donor priority가 위쪽 holder보다 높을 때만 priority inversion을 완화할 필요가 있다. */
 		if (donor->priority > receiver->priority) {
 			/* donation_elem을 추가로 연결하지 않고 유효 우선순위 값만 위로 전파한다. */
