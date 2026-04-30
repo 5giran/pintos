@@ -249,6 +249,8 @@ void lock_release(struct lock *lock)
 	/* 현재 thread가 실제로 들고 있는 lock만 해제할 수 있다. */
 	ASSERT(lock_held_by_current_thread(lock));
 
+	/* remove_donation() 부터 sema_up()이 끝날 때까지 인터럽트 비활성화를 해주어야 한다. */
+	enum intr_level old_level = intr_disable();
 	/* 이 lock 때문에 받은 donation만 제거한 뒤,
 	   남아 있는 donation과 base priority를 기준으로 유효 우선순위를 다시 계산한다. */
 	remove_donation (lock);
@@ -261,6 +263,9 @@ void lock_release(struct lock *lock)
 
 	/* lock을 기다리던 thread 중 하나를 깨워 lock 획득을 다시 시도하게 한다. */
 	sema_up (&lock->semaphore);
+
+	/* 인터럽트 다시 활성화 */
+	intr_set_level(old_level);
 }
 
 /* 현재 thread가 LOCK을 가지고 있으면 true, 아니면 false를 반환한다.
