@@ -584,10 +584,14 @@ init_thread(struct thread *t, const char *name, int priority)
 static struct thread *
 next_thread_to_run(void)
 {
-	if (list_empty(&ready_list))
+	if (list_empty(&ready_list)) {
 		return idle_thread;
-	else
+	}
+	else {
+		/* ready_list에 있는 lock holder인 스레드가 우선순위를 기부 받아, 삽입 시 정렬 순서와 다를 수 있으므로 재정렬 필요. */
+		list_sort(&ready_list, thread_priority_compare, NULL);
 		return list_entry(list_pop_front(&ready_list), struct thread, elem);
+	}
 }
 
 /* iretq를 사용해 스레드를 시작한다. */
