@@ -314,20 +314,25 @@ load (const char *file_name, struct intr_frame *if_) {
 	bool success = false;
 	int i;
 
-	/* page directory를 할당하고 활성화합니다. */
+	/* page directory를 할당한다.
+		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말
+	*/
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
+	/* 현재 스레드의 페이지 테이블 활성화
+		 이제 CPU가 이 프로그램의 page table을 기준으로 물리 주소 <-> 가상 주소 변환
+	*/
 	process_activate (thread_current ());
 
-	/* 실행 파일을 엽니다. */
+	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", file_name);
 		goto done;
 	}
 
-	/* 실행 파일 헤더를 읽고 검증합니다. */
+	/* ELF(실행 파일) 헤더를 읽고, 진짜 실행 가능한 ELF 파일인지 검증 */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -339,7 +344,9 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	}
 
-	/* 프로그램 헤더를 읽습니다. */
+	/* 프로그램 헤더를 순회하며 읽습니다.
+		 ELF 안에 있는 "어느 부분을 메모리에 올릴지" 설명서를 하나씩 읽는 것
+	*/
 	file_ofs = ehdr.e_phoff;
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		struct Phdr phdr;
@@ -363,8 +370,15 @@ load (const char *file_name, struct intr_frame *if_) {
 			case PT_INTERP:
 			case PT_SHLIB:
 				goto done;
+			/* PT_LOAD 타입 세그먼트만 실제 메모리에 올린다.
+				 ELF 파일 내부에서도 실제 실행에 필요한 code/data 구역만 메모리에 올리는 것
+			*/	
 			case PT_LOAD:
+				/* 각 세그먼트는 validate_segment()로 주소와 크기 검증
+					 이 구역을 사용자 메모리에 올려도 안전한지 확인하는 것
+				*/
 				if (validate_segment (&phdr, file)) {
+					/* load_segment()가 파일에서 읽을 바이트와 0으로 채울 바이트를 계산 */
 					bool writable = (phdr.p_flags & PF_W) != 0;
 					uint64_t file_page = phdr.p_offset & ~PGMASK;
 					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
@@ -392,11 +406,15 @@ load (const char *file_name, struct intr_frame *if_) {
 		}
 	}
 
-	/* 스택을 설정합니다. */
+	/* setup_stack()으로 사용자 스택 최상단 아래 1페이지를 매핑한다.
+		 사용자 프로그램이 쓸 스택 공간 1페이지를 만들어주는 것
+	*/
 	if (!setup_stack (if_))
 		goto done;
 
-	/* 시작 주소. */
+	/* ELF 엔트리 주소를 if_->rip에 저장
+		 프로그램이 처음 실행될 시작 주소를 CPU 상태에 넣어두는 것
+	*/
 	if_->rip = ehdr.e_entry;
 
 	/* TODO: 여기에 코드를 작성하세요.
@@ -488,19 +506,21 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* 메모리 페이지를 가져옵니다. */
+		/* 메모리 페이지를 가져옵니다. 사용자 프로그램용 물리 메모리 1페이지를 가져온다. */
 		uint8_t *kpage = palloc_get_page (PAL_USER);
 		if (kpage == NULL)
 			return false;
 
-		/* 이 페이지를 로드합니다. */
+		/* 이 페이지를 로드합니다. 실행 파일 내용을 일단 커널이 접근 가능한 메모리에 읽어옴  */
 		if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
 			palloc_free_page (kpage);
 			return false;
 		}
 		memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-		/* 페이지를 프로세스의 주소 공간에 추가합니다. */
+		/* 페이지를 프로세스의 주소 공간에 추가합니다. 
+			 사용자 주소 upage가 실제 메모리 kpage를 가리키게 주소표에 등록
+		*/
 		if (!install_page (upage, kpage, writable)) {
 			printf("fail\n");
 			palloc_free_page (kpage);
