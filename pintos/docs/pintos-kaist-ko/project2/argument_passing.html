@@ -1,0 +1,928 @@
+
+<!DOCTYPE HTML>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>인자 전달(Argument Passing) · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="user_memory.html"/>
+    
+    
+    <link rel="prev" href="introduction.html"/>
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="검색어를 입력하세요"/>
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        <li class="header">소개</li>
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../index.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.2" data-path="../introduction/getting_started.html">
+            
+                <a href="../introduction/getting_started.html">
+            
+                    
+                    시작하기
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.3" data-path="../introduction/grading.html">
+            
+                <a href="../introduction/grading.html">
+            
+                    
+                    채점
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.4" data-path="../introduction/legal_and_ethical_issues.html">
+            
+                <a href="../introduction/legal_and_ethical_issues.html">
+            
+                    
+                    법적 및 윤리적 문제
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 1: 스레드(Threads)</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../project1/introduction.html">
+            
+                <a href="../project1/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../project1/alarm_clock.html">
+            
+                <a href="../project1/alarm_clock.html">
+            
+                    
+                    알람 시계(Alarm Clock)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../project1/priority_scheduling.html">
+            
+                <a href="../project1/priority_scheduling.html">
+            
+                    
+                    우선순위 스케줄링(Priority Scheduling)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../project1/advanced_scheduler.html">
+            
+                <a href="../project1/advanced_scheduler.html">
+            
+                    
+                    고급 스케줄러(Advanced Scheduler)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.5" data-path="../project1/FAQ.html">
+            
+                <a href="../project1/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 2: 사용자 프로그램(User Programs)</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="introduction.html">
+            
+                <a href="introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="3.2" data-path="argument_passing.html">
+            
+                <a href="argument_passing.html">
+            
+                    
+                    인자 전달(Argument Passing)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="user_memory.html">
+            
+                <a href="user_memory.html">
+            
+                    
+                    사용자 메모리(User Memory)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.4" data-path="system_call.html">
+            
+                <a href="system_call.html">
+            
+                    
+                    시스템 콜(System Calls)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.5" data-path="process_termination.html">
+            
+                <a href="process_termination.html">
+            
+                    
+                    프로세스 종료 메시지
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.6" data-path="deny_write.html">
+            
+                <a href="deny_write.html">
+            
+                    
+                    실행 파일 쓰기 거부
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.7" data-path="dup.html">
+            
+                <a href="dup.html">
+            
+                    
+                    파일 디스크립터 확장(Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.8" data-path="FAQ.html">
+            
+                <a href="FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 3: 가상 메모리(Virtual Memory)</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../project3/introduction.html">
+            
+                <a href="../project3/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../project3/vm_management.html">
+            
+                <a href="../project3/vm_management.html">
+            
+                    
+                    메모리 관리
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.3" data-path="../project3/anon.html">
+            
+                <a href="../project3/anon.html">
+            
+                    
+                    익명 페이지(Anonymous Page)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.4" data-path="../project3/stack_growth.html">
+            
+                <a href="../project3/stack_growth.html">
+            
+                    
+                    스택 증가(Stack Growth)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.5" data-path="../project3/memory_mapped_files.html">
+            
+                <a href="../project3/memory_mapped_files.html">
+            
+                    
+                    메모리 매핑 파일(Memory Mapped Files)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.6" data-path="../project3/swapping.html">
+            
+                <a href="../project3/swapping.html">
+            
+                    
+                    스왑 인/아웃(Swap In/Out)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.7" data-path="../project3/cow.html">
+            
+                <a href="../project3/cow.html">
+            
+                    
+                    쓰기 시 복사(Copy-on-Write, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.8" data-path="../project3/FAQ.html">
+            
+                <a href="../project3/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 4: 파일 시스템(File System)</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../project4/introduction.html">
+            
+                <a href="../project4/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../project4/indexed_and_extensible_files.html">
+            
+                <a href="../project4/indexed_and_extensible_files.html">
+            
+                    
+                    인덱스 기반 확장 가능 파일
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.3" data-path="../project4/subdirectories.html">
+            
+                <a href="../project4/subdirectories.html">
+            
+                    
+                    하위 디렉터리와 소프트 링크
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.4" data-path="../project4/buffer_cache.html">
+            
+                <a href="../project4/buffer_cache.html">
+            
+                    
+                    버퍼 캐시(Buffer Cache, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.5" data-path="../project4/synchronization.html">
+            
+                <a href="../project4/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.6" data-path="../project4/FAQ.html">
+            
+                <a href="../project4/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">부록</li>
+        
+        
+    
+        <li class="chapter " data-level="6.1" data-path="../appendix/threads.html">
+            
+                <a href="../appendix/threads.html">
+            
+                    
+                    스레드(Threads)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.2" data-path="../appendix/synchronization.html">
+            
+                <a href="../appendix/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.3" data-path="../appendix/memory_allocation.html">
+            
+                <a href="../appendix/memory_allocation.html">
+            
+                    
+                    메모리 할당
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.4" data-path="../appendix/virtual_address.html">
+            
+                <a href="../appendix/virtual_address.html">
+            
+                    
+                    가상 주소(Virtual Address)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.5" data-path="../appendix/page_table.html">
+            
+                <a href="../appendix/page_table.html">
+            
+                    
+                    페이지 테이블(Page Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.6" data-path="../appendix/debugging_tools.html">
+            
+                <a href="../appendix/debugging_tools.html">
+            
+                    
+                    디버깅 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.7" data-path="../appendix/development_tools.html">
+            
+                <a href="../appendix/development_tools.html">
+            
+                    
+                    개발 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.8" data-path="../appendix/hash_table.html">
+            
+                <a href="../appendix/hash_table.html">
+            
+                    
+                    해시 테이블(Hash Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            GitBook으로 게시됨
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href="../index.html">인자 전달(Argument Passing)</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h3 id="argument-passing">인자 전달(Argument Passing)</h3>
+<p><strong><code>process_exec()</code>에서 사용자 프로그램(user program)의 인자를 설정하십시오.</strong></p>
+<h4 id="x86-64-calling-convention">x86-64 호출 규약(Calling Convention)</h4>
+<p>이 절은 64비트 x86-64 Unix 구현에서 일반 함수 호출에 사용하는 호출 규약의
+중요한 부분을 요약합니다. 간결성을 위해 일부 세부 사항은 생략했습니다.
+더 자세한 내용은
+<a href="https://en.wikipedia.org/wiki/X86_calling_conventions#System_V_AMD64_ABI" target="_blank">System V AMD64 ABI</a>를 참고하십시오.</p>
+<p>호출 규약은 다음과 같이 동작합니다.</p>
+<ol>
+<li>사용자 수준 애플리케이션은 정수 인자를 전달할 때 순서대로
+<code>%rdi</code>, <code>%rsi</code>, <code>%rdx</code>, <code>%rcx</code>, <code>%r8</code>, <code>%r9</code>
+레지스터를 사용합니다.</li>
+<li>호출자(caller)는 다음 명령어의 주소, 즉 반환 주소(return address)를
+스택(stack)에 푸시하고 피호출자(callee)의 첫 번째 명령어로 점프합니다.
+x86-64 명령어 하나인 <code>CALL</code>이 이 두 작업을 모두 수행합니다.</li>
+<li>피호출자(callee)가 실행됩니다.</li>
+<li>피호출자에 반환값이 있으면 그 값을 RAX 레지스터에 저장합니다.</li>
+<li>피호출자는 스택에서 반환 주소를 꺼내고, x86-64 <code>RET</code> 명령어를 사용해
+그 주소가 가리키는 위치로 점프하여 반환합니다.</li>
+</ol>
+<p>세 개의 int 인자를 받는 함수 <code>f()</code>를 생각해 봅시다. 다음 그림은
+<code>f()</code>가 <code>f(1, 2, 3)</code>으로 호출되었다고 가정할 때, 위의 3단계가 시작되는
+시점에 피호출자에서 보이는 예시 스택 프레임(stack frame)과 레지스터 상태를
+보여 줍니다. 초기 스택 주소는 임의의 값입니다.</p>
+<pre><code>                             +----------------+
+stack pointer --&gt; 0x4747fe70 | return address |
+                             +----------------+
+RDI: 0x0000000000000001 | RSI: 0x0000000000000002 | RDX: 0x0000000000000003
+</code></pre><h4 id="program-startup-details">프로그램 시작 세부 사항(Program Startup Details)</h4>
+<p>Pintos의 사용자 프로그램용 C 라이브러리는 <code>_start()</code>를 사용자 프로그램의 진입점(entry point)으로 지정하며,
+이는 <code>lib/user/entry.c</code>에 있습니다.
+이 함수는 <code>main()</code>을 감싸는 래퍼(wrapper)이며, <code>exit()</code>는
+<code>main()</code>이 반환할 때 호출됩니다.</p>
+<pre><code class="lang-C"><span class="hljs-keyword">void</span>
+_start (<span class="hljs-keyword">int</span> argc, <span class="hljs-keyword">char</span> *argv[]) {
+    <span class="hljs-built_in">exit</span> (main (argc, argv));
+}
+</code></pre>
+<p>커널(kernel)은 사용자 프로그램(user program)의 실행을 시작시키기 전에
+초기 함수의 인자들을 레지스터에 넣어야 합니다. 인자는 일반 호출 규약과
+같은 방식으로 전달됩니다.</p>
+<p>다음 예시 명령의 인자를 어떻게 처리할지 생각해 봅시다.
+<code>/bin/ls -l foo bar</code>.</p>
+<ol>
+<li><p>명령을 단어로 나눕니다. <code>/bin/ls</code>, <code>-l</code>, <code>foo</code>, <code>bar</code>.</p>
+</li>
+<li><p>단어들을 스택(stack)의 맨 위에 놓습니다. 이 단어들은 포인터를 통해
+참조되므로 순서는 중요하지 않습니다.</p>
+</li>
+<li><p>각 문자열의 주소와 널 포인터 센티널(null pointer sentinel)을 오른쪽에서
+왼쪽 순서로 스택에 푸시합니다. 이것들이 argv의 원소입니다. 널 포인터
+센티널은 C 표준이 요구하는 대로 <code>argv[argc]</code>가 널 포인터가 되게 합니다.
+이 순서는 <code>argv[0]</code>이 가장 낮은 가상 주소(virtual address)에 놓이도록
+보장합니다. 단어 정렬(word-aligned) 접근은 정렬되지 않은 접근보다 빠르므로,
+최상의 성능을 위해 첫 번째 푸시 전에 스택 포인터(stack pointer)를 8의 배수로
+내림 정렬하십시오.</p>
+</li>
+<li><p><code>%rsi</code>가 <code>argv</code>, 즉 <code>argv[0]</code>의 주소를 가리키게 하고
+<code>%rdi</code>를 <code>argc</code>로 설정합니다.</p>
+</li>
+<li><p>마지막으로 가짜 &quot;반환 주소(return address)&quot;를 푸시합니다. 진입 함수는
+결코 반환하지 않지만, 그 스택 프레임(stack frame)은 다른 함수와 같은 구조를
+가져야 합니다.</p>
+</li>
+</ol>
+<p>아래 표는 사용자 프로그램(user program)이 시작되기 직전의 스택(stack) 상태와
+관련 레지스터를 보여 줍니다.
+스택은 아래쪽으로 자란다는 점에 유의하십시오.</p>
+<table>
+<thead>
+<tr>
+<th>주소(Address)</th>
+<th>이름(Name)</th>
+<th>데이터(Data)</th>
+<th>타입(Type)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0x4747fffc</td>
+<td>argv[3][...]</td>
+<td>&apos;bar\0&apos;</td>
+<td>char[4]</td>
+</tr>
+<tr>
+<td>0x4747fff8</td>
+<td>argv[2][...]</td>
+<td>&apos;foo\0&apos;</td>
+<td>char[4]</td>
+</tr>
+<tr>
+<td>0x4747fff5</td>
+<td>argv[1][...]</td>
+<td>&apos;-l\0&apos;</td>
+<td>char[3]</td>
+</tr>
+<tr>
+<td>0x4747ffed</td>
+<td>argv[0][...]</td>
+<td>&apos;/bin/ls\0&apos;</td>
+<td>char[8]</td>
+</tr>
+<tr>
+<td>0x4747ffe8</td>
+<td>word-align</td>
+<td>0</td>
+<td>uint8_t[]</td>
+</tr>
+<tr>
+<td>0x4747ffe0</td>
+<td>argv[4]</td>
+<td>0</td>
+<td>char *</td>
+</tr>
+<tr>
+<td>0x4747ffd8</td>
+<td>argv[3]</td>
+<td>0x4747fffc</td>
+<td>char *</td>
+</tr>
+<tr>
+<td>0x4747ffd0</td>
+<td>argv[2]</td>
+<td>0x4747fff8</td>
+<td>char *</td>
+</tr>
+<tr>
+<td>0x4747ffc8</td>
+<td>argv[1]</td>
+<td>0x4747fff5</td>
+<td>char *</td>
+</tr>
+<tr>
+<td>0x4747ffc0</td>
+<td>argv[0]</td>
+<td>0x4747ffed</td>
+<td>char *</td>
+</tr>
+<tr>
+<td>0x4747ffb8</td>
+<td>반환 주소(return address)</td>
+<td>0</td>
+<td>void (*) ()</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>RDI: 4 | RSI: 0x4747ffc0</p>
+</blockquote>
+<p>이 예시에서 스택 포인터는 <code>0x4747ffb8</code>로 초기화됩니다.
+위에 보인 것처럼 여러분의 코드는 <code>USER_STACK</code>에서 스택을 시작해야 합니다. 이는
+<code>include/threads/vaddr.h</code>에 정의되어 있습니다.</p>
+<p>비표준 <code>hex_dump()</code> 함수는 <code>&lt;stdio.h&gt;</code>에 선언되어 있으며, 여러분의
+인자 전달(argument passing) 코드를 디버깅(debugging)할 때 유용할 수 있습니다.</p>
+<h4 id="implement-the-argument-passing">인자 전달(argument passing)을 구현하십시오.</h4>
+<p>현재 <code>process_exec()</code>는 새 프로세스(process)에 인자를 전달하는 기능을
+지원하지 않습니다. 이 기능을 구현하려면 <code>process_exec()</code>를 확장하여,
+인자로 단순히 프로그램 파일 이름만 받는 대신 공백을 기준으로 단어를 나누게
+하십시오. 첫 번째 단어는 프로그램 이름, 두 번째 단어는 첫 번째 인자이며
+그 뒤도 같은 방식입니다. 즉, <code>process_exec(&quot;grep foo bar&quot;)</code>는 grep을
+실행하면서 foo와 bar라는 두 인자를 전달해야 합니다.</p>
+<p>명령줄(command line) 안에서 여러 개의 공백은 하나의 공백과 같으므로,
+<code>process_exec(&quot;grep foo bar&quot;)</code>는 원래 예시와 동일합니다. 명령줄 인자의
+길이에 합리적인 제한을 둘 수 있습니다. 예를 들어 인자가 한 페이지(4 kB)에
+들어가는 경우로 제한할 수 있습니다. pintos 유틸리티가 커널(kernel)에 전달할
+수 있는 명령줄 인자에는 이와 별개로 128바이트 제한이 있습니다.</p>
+<p>인자 문자열은 원하는 방식으로 파싱(parse)해도 됩니다. 막막하다면
+<code>strtok_r()</code>를 살펴보십시오. 이 함수는 <code>include/lib/string.h</code>에 프로토타입이 있고
+<code>lib/string.c</code>에 자세한 주석과 함께 구현되어 있습니다. 프롬프트에서
+<code>man strtok_r</code>를 실행하여 man 페이지를 확인할 수도 있습니다.</p>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class="search-results-count"></span>개의 검색 결과: "<span class="search-query"></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">일치하는 검색 결과가 없습니다: "<span class="search-query"></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="introduction.html" class="navigation navigation-prev " aria-label="이전 페이지: 소개(Introduction)">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="user_memory.html" class="navigation navigation-next " aria-label="다음 페이지: 사용자 메모리(User Memory)">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Argument Passing","level":"3.2","depth":1,"next":{"title":"User Memory","level":"3.3","depth":1,"path":"project2/user_memory.md","ref":"project2/user_memory.md","articles":[]},"previous":{"title":"Introduction","level":"3.1","depth":1,"path":"project2/introduction.md","ref":"project2/introduction.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":[],"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"}},"file":{"path":"project2/argument_passing.md","mtime":"2022-05-23T14:07:34.340Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2022-05-23T14:13:22.147Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    <script src="../gitbook/file-navigation.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/search_index_ko.js"></script>
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+    </body>
+</html>

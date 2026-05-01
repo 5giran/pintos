@@ -1,0 +1,842 @@
+
+<!DOCTYPE HTML>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>페이지 테이블(Page Table) · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="debugging_tools.html"/>
+    
+    
+    <link rel="prev" href="virtual_address.html"/>
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="검색어를 입력하세요"/>
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        <li class="header">소개</li>
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../index.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.2" data-path="../introduction/getting_started.html">
+            
+                <a href="../introduction/getting_started.html">
+            
+                    
+                    시작하기
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.3" data-path="../introduction/grading.html">
+            
+                <a href="../introduction/grading.html">
+            
+                    
+                    채점
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.4" data-path="../introduction/legal_and_ethical_issues.html">
+            
+                <a href="../introduction/legal_and_ethical_issues.html">
+            
+                    
+                    법적 및 윤리적 문제
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 1: 스레드(Threads)</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../project1/introduction.html">
+            
+                <a href="../project1/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../project1/alarm_clock.html">
+            
+                <a href="../project1/alarm_clock.html">
+            
+                    
+                    알람 시계(Alarm Clock)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../project1/priority_scheduling.html">
+            
+                <a href="../project1/priority_scheduling.html">
+            
+                    
+                    우선순위 스케줄링(Priority Scheduling)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../project1/advanced_scheduler.html">
+            
+                <a href="../project1/advanced_scheduler.html">
+            
+                    
+                    고급 스케줄러(Advanced Scheduler)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.5" data-path="../project1/FAQ.html">
+            
+                <a href="../project1/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 2: 사용자 프로그램(User Programs)</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../project2/introduction.html">
+            
+                <a href="../project2/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../project2/argument_passing.html">
+            
+                <a href="../project2/argument_passing.html">
+            
+                    
+                    인자 전달(Argument Passing)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../project2/user_memory.html">
+            
+                <a href="../project2/user_memory.html">
+            
+                    
+                    사용자 메모리(User Memory)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.4" data-path="../project2/system_call.html">
+            
+                <a href="../project2/system_call.html">
+            
+                    
+                    시스템 콜(System Calls)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.5" data-path="../project2/process_termination.html">
+            
+                <a href="../project2/process_termination.html">
+            
+                    
+                    프로세스 종료 메시지
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.6" data-path="../project2/deny_write.html">
+            
+                <a href="../project2/deny_write.html">
+            
+                    
+                    실행 파일 쓰기 거부
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.7" data-path="../project2/dup.html">
+            
+                <a href="../project2/dup.html">
+            
+                    
+                    파일 디스크립터 확장(Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.8" data-path="../project2/FAQ.html">
+            
+                <a href="../project2/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 3: 가상 메모리(Virtual Memory)</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../project3/introduction.html">
+            
+                <a href="../project3/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../project3/vm_management.html">
+            
+                <a href="../project3/vm_management.html">
+            
+                    
+                    메모리 관리
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.3" data-path="../project3/anon.html">
+            
+                <a href="../project3/anon.html">
+            
+                    
+                    익명 페이지(Anonymous Page)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.4" data-path="../project3/stack_growth.html">
+            
+                <a href="../project3/stack_growth.html">
+            
+                    
+                    스택 증가(Stack Growth)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.5" data-path="../project3/memory_mapped_files.html">
+            
+                <a href="../project3/memory_mapped_files.html">
+            
+                    
+                    메모리 매핑 파일(Memory Mapped Files)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.6" data-path="../project3/swapping.html">
+            
+                <a href="../project3/swapping.html">
+            
+                    
+                    스왑 인/아웃(Swap In/Out)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.7" data-path="../project3/cow.html">
+            
+                <a href="../project3/cow.html">
+            
+                    
+                    쓰기 시 복사(Copy-on-Write, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.8" data-path="../project3/FAQ.html">
+            
+                <a href="../project3/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 4: 파일 시스템(File System)</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../project4/introduction.html">
+            
+                <a href="../project4/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../project4/indexed_and_extensible_files.html">
+            
+                <a href="../project4/indexed_and_extensible_files.html">
+            
+                    
+                    인덱스 기반 확장 가능 파일
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.3" data-path="../project4/subdirectories.html">
+            
+                <a href="../project4/subdirectories.html">
+            
+                    
+                    하위 디렉터리와 소프트 링크
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.4" data-path="../project4/buffer_cache.html">
+            
+                <a href="../project4/buffer_cache.html">
+            
+                    
+                    버퍼 캐시(Buffer Cache, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.5" data-path="../project4/synchronization.html">
+            
+                <a href="../project4/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.6" data-path="../project4/FAQ.html">
+            
+                <a href="../project4/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">부록</li>
+        
+        
+    
+        <li class="chapter " data-level="6.1" data-path="threads.html">
+            
+                <a href="threads.html">
+            
+                    
+                    스레드(Threads)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.2" data-path="synchronization.html">
+            
+                <a href="synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.3" data-path="memory_allocation.html">
+            
+                <a href="memory_allocation.html">
+            
+                    
+                    메모리 할당
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.4" data-path="virtual_address.html">
+            
+                <a href="virtual_address.html">
+            
+                    
+                    가상 주소(Virtual Address)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="6.5" data-path="page_table.html">
+            
+                <a href="page_table.html">
+            
+                    
+                    페이지 테이블(Page Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.6" data-path="debugging_tools.html">
+            
+                <a href="debugging_tools.html">
+            
+                    
+                    디버깅 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.7" data-path="development_tools.html">
+            
+                <a href="development_tools.html">
+            
+                    
+                    개발 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.8" data-path="hash_table.html">
+            
+                <a href="hash_table.html">
+            
+                    
+                    해시 테이블(Hash Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            GitBook으로 게시됨
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href="../index.html">페이지 테이블(Page Table)</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h1 id="page-table">페이지 테이블(Page Table)</h1>
+<p><code>threads/mmu.c</code>의 코드는 x86_64 하드웨어 페이지 테이블(page table)에 대한 추상 인터페이스입니다. Pintos의 페이지
+테이블(프로젝트에서 사용하게 될 것)은 Intel 프로세서 문서에서 Page-Map-Level-4를 뜻하는 <code>pml4</code>라고 부릅니다. 이 테이블이
+4단계(level)로 구성되기 때문입니다. 페이지 테이블 인터페이스는 내부 구조에 접근하기 편하도록 페이지 테이블을 나타내는 데
+<code>uint64_t *</code>를 사용합니다. 아래 절에서는 페이지 테이블 인터페이스와 내부 구조를 설명합니다.</p>
+<h2 id="creation-destruction-and-activation">생성, 소멸, 활성화(Creation, Destruction, and Activation)</h2>
+<p>이 함수들은 페이지 테이블(page table)을 생성하고, 소멸시키고, 활성화합니다. 기본 Pintos 코드는 필요한 곳에서 이미
+이 함수들을 호출하므로, 직접 호출할 필요는 없을 것입니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-keyword">uint64_t</span> * pml4_create (<span class="hljs-keyword">void</span>);
+</code></pre>
+<blockquote>
+<p>새 페이지 테이블(page table)을 생성해 반환합니다. 새 페이지 테이블에는 Pintos의 일반적인 커널 가상 페이지 매핑(kernel virtual page mappings)은
+포함되지만 사용자 가상 매핑(user virtual mappings)은 없습니다.
+메모리를 얻을 수 없으면 null 포인터를 반환합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">pml4_destroy</span> <span class="hljs-params">(uint64_t *pml4)</span></span>;
+</code></pre>
+<blockquote>
+<p>pml4 자체와 pml4가 매핑하는 프레임(frame)을 포함하여 pml4가 보유한 모든 리소스를 해제합니다.
+페이지 테이블(page table)의 모든 레벨에서 모든 리소스를 해제하기 위해 <em>재귀적으로(recursively)</em>
+<code>pdpe_destroy</code>, <code>pgdir_destory</code>, <code>pt_destroy</code>를 호출합니다. </p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">pml4_activate</span> <span class="hljs-params">(uint64 t *pml4)</span>
+</span></code></pre>
+<blockquote>
+<p>pml4를 활성화합니다. 활성 페이지 테이블(active page table)은 CPU가 메모리 참조(memory reference)를 변환하는 데
+사용하는 페이지 테이블입니다.</p>
+</blockquote>
+<h2 id="inspection-and-updates">검사와 갱신(Inspection and Updates)</h2>
+<p>이 함수들은 페이지 테이블(page table)로 캡슐화된 페이지(page)에서 프레임(frame)으로의 매핑을 검사하거나 갱신합니다.
+실행 중인 프로세스와 일시 중단된 프로세스의 페이지 테이블, 즉 활성 및 비활성 페이지 테이블 모두에서 동작하며,
+필요에 따라 TLB를 플러시(flush)합니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">pml4_set_page</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">void</span> *upage, <span class="hljs-keyword">void</span> *kpage, <span class="hljs-keyword">bool</span> rw)</span></span>;
+</code></pre>
+<blockquote>
+<p>pd에 사용자 페이지(user page) upage에서 커널 가상 주소(kernel virtual address) kpage로 식별되는 프레임(frame)으로의
+매핑을 추가합니다. rw가 true이면 페이지는 읽기/쓰기(read/write)로 매핑되고, 그렇지 않으면 읽기 전용(read-only)으로
+매핑됩니다. 사용자 페이지 upage는 pml4에 이미 매핑되어 있으면 안 됩니다.
+커널 페이지(kernel page) kpage는 <code>palloc_get_page(PAL_USER)</code>로 사용자 풀(user pool)에서 얻은 커널 가상 주소여야 합니다.
+성공하면 true를, 실패하면 false를 반환합니다. 페이지 테이블(page table)에 필요한 추가 메모리를 얻을 수 없으면 실패합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> * <span class="hljs-title">pml4_get_page</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *uaddr)</span></span>;
+</code></pre>
+<blockquote>
+<p>pml4에서 uaddr에 매핑된 프레임(frame)을 찾습니다. uaddr이 매핑되어 있으면 그 프레임의 커널 가상 주소(kernel virtual address)를
+반환하고, 매핑되어 있지 않으면 null 포인터를 반환합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">pml4_clear_page</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">void</span> *upage)</span></span>;
+</code></pre>
+<blockquote>
+<p>pml4에서 페이지를 &#x201C;존재하지 않음(not present)&#x201D;으로 표시합니다. 이후 그 페이지에 접근하면 폴트(fault)가 발생합니다.
+해당 페이지에 대한 페이지 테이블(page table)의 다른 비트들은 보존되므로 접근 비트(accessed bit)와 더티 비트(dirty bit)(다음 절 참조)를
+확인할 수 있습니다. 해당 페이지가 매핑되어 있지 않으면 이 함수는 아무 효과가 없습니다.</p>
+</blockquote>
+<h2 id="accessed-and-dirty-bits">접근 비트와 더티 비트(Accessed and Dirty Bits)</h2>
+<p>x86_64 하드웨어는 각 페이지의 페이지 테이블 엔트리(page table entry, PTE)에 있는 한 쌍의 비트를 통해
+페이지 교체 알고리즘(page replacement algorithms) 구현을 일부 지원합니다. 페이지를 읽거나 쓸 때마다 CPU는 해당 페이지의 PTE에서
+접근 비트(accessed bit)를 1로 설정하고, 어떤 쓰기든 발생하면 CPU는 더티 비트(dirty bit)를 1로 설정합니다.
+CPU는 이 비트들을 0으로 재설정하지 않지만 OS는 그렇게 할 수 있습니다.
+이 비트들을 올바르게 해석하려면 <em>별칭(aliases)</em>을 이해해야 합니다. 별칭은 같은 프레임(frame)을 가리키는 두 개 이상의
+페이지를 뜻합니다. 별칭이 있는 프레임에 접근하면 접근 비트와 더티 비트는 접근에 사용된 페이지의 페이지 테이블 엔트리 하나에서만
+갱신됩니다. 다른 별칭들의 접근 비트와 더티 비트는 갱신되지 않습니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">pml4_is_dirty</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *vpage)</span></span>;
+<span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">pml4_is_accessed</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *vpage)</span></span>;
+</code></pre>
+<blockquote>
+<p>pml4가 vpage에 대해 더티 비트(dirty bit) 또는 접근 비트(accessed bit)가 표시된 페이지 테이블 엔트리(page table entry)를 포함하면
+true를 반환합니다. 그렇지 않으면 false를 반환합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">pml4_set_dirty</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *vpage, <span class="hljs-keyword">bool</span> dirty)</span></span>;
+<span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">pml4_set_accessed</span> <span class="hljs-params">(uint64_t *pml4, <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *vpage, <span class="hljs-keyword">bool</span> accessed)</span></span>;
+</code></pre>
+<blockquote>
+<p>pml4에 page에 대한 페이지 테이블 엔트리(page table entry)가 있으면, 그 더티 비트(dirty bit)(또는 접근 비트(accessed bit))를
+주어진 값으로 설정합니다.</p>
+</blockquote>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class="search-results-count"></span>개의 검색 결과: "<span class="search-query"></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">일치하는 결과가 없습니다: "<span class="search-query"></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="virtual_address.html" class="navigation navigation-prev " aria-label="이전 페이지: 가상 주소(Virtual Address)">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="debugging_tools.html" class="navigation navigation-next " aria-label="다음 페이지: 디버깅 도구(Debugging Tools)">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Page Table","level":"6.5","depth":1,"next":{"title":"Debugging Tools","level":"6.6","depth":1,"path":"appendix/debugging_tools.md","ref":"appendix/debugging_tools.md","articles":[]},"previous":{"title":"Virtual Address","level":"6.4","depth":1,"path":"appendix/virtual_address.md","ref":"appendix/virtual_address.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":[],"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"}},"file":{"path":"appendix/page_table.md","mtime":"2022-05-23T14:07:34.232Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2022-05-23T14:13:22.147Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    <script src="../gitbook/file-navigation.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/search_index_ko.js"></script>
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+    </body>
+</html>
