@@ -348,6 +348,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	int i;
 	/* 문자열을 user stack에 복사한 위치의 주소를 담는 배열, char * 보다도 void * 가 의미에 맞음. */
 	void *arg_addr[MAX_ARGS];
+	void *argv_addr;
 
 	/* page directory를 할당한다.
 		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말
@@ -456,6 +457,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
 	uintptr_t rsp = if_->rsp;
 
+	/* 스택에 인자 문자열 자체를 먼저 복사해 push */
 	for (int i = argc - 1; i >= 0; i--) {
 		int len = strlen(argv_tokens[i]) + 1; // 문자열 끝 \0 포함
 		rsp -= len; // 문자열 길이만큼 메모리 낮은 주소로 가서 높은 주소 방향으로 문자열 복사
@@ -472,13 +474,42 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	}
 	/* NULL pointer 크기 만큼 rsp 내려감 */
 	rsp -= 8;
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
+	}
 	/* argv[argc] = NULL 
 	 * uintptr_t는 주소를 담을 수 있는 정수 타입이다.
 	 * 해야하는 작업은, 이 정수를 주소로 보고 -> 그 주소를 가리키는 포인터를 통해 그 주소의 내용을 NULL로 만들어주는 것
 	 * 그래서 uintptr_t 로 casting이 먼저 필요, 이후 안의 내용을 역참조(*)하여 그 값에 NULL 대입
 	 */
-	*(uintptr_t *) rsp = NULL; 
-	
+	*(uintptr_t *) rsp = 0;
+
+	/* 스택에 각 인자 문자열 주소를 push 
+	 * 이 스택 주소에는 char * 값 하나가 저장되어야한다. (실제 문자열의 주소)
+	 * 그러면 rsp는 char * 타입의 데이터를 담고 있는 주소니까, char ** 타입이고, 그 안의 내용을 arg_addr[i]로 대입해주어야 하니 역참조 필요
+	 */
+	for (int i = argc - 1; i >= 0; i--) {
+		rsp -= 8;
+		if (rsp < USER_STACK - PGSIZE) {
+			goto done;
+		}
+		*(char **) rsp = arg_addr[i];
+	}
+
+	/* 현재 rsp 포인터가 argv 배열 시작 주소 */
+	argv_addr = (void *) rsp;
+
+	rsp -= 8;
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
+	}
+	/* fake return address */
+	*(uintptr_t *) rsp = 0;
+
+	if_->R.rdi = (uint64_t) argc;
+	if_->rsp = (uint64_t) rsp;
+	if_->R.rsi = (uint64_t) argv_addr;
+
 	success = true;
 
 done:
