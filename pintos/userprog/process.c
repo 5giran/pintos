@@ -175,7 +175,7 @@ process_exec (void *f_name) {
 		/* argv_tokens[MAX_ARGS]에 접근 전에 반복문이 끝나야 함.
 		 * 그렇지 않으면, 배열의 크기보다 인자 수가 더 많은 것
 		*/		
-		if (argc = MAX_ARGS) {
+		if (argc == MAX_ARGS) {
 			palloc_free_page(file_name);
 			return -1;
 		}
