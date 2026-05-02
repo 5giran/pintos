@@ -22,7 +22,7 @@
 #include "vm/vm.h"
 #endif
 
-#define MAX_ARGS 32
+#define MAX_ARGS PGSIZE / sizeof(char *) - 1
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
@@ -162,7 +162,11 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 	/* 파싱 결과 담을 배열 */
-	char *argv_tokens[MAX_ARGS + 1]; //	테스트 케이스 분석 결과, 가장 많은 인자 개수는 23 이지만, 여유 있게 32로 구현
+	char **argv_tokens = palloc_get_page (0);
+	if (argv_tokens == NULL) {
+		palloc_free_page(file_name);
+		return -1;
+	}
 	/* strtok_r 함수 사용을 위한 포인터 */
 	char *token;
 	char *next_token;
@@ -177,6 +181,7 @@ process_exec (void *f_name) {
 		*/		
 		if (argc == MAX_ARGS) {
 			palloc_free_page(file_name);
+			palloc_free_page(argv_tokens);
 			return -1;
 		}
 
@@ -208,6 +213,7 @@ process_exec (void *f_name) {
 		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
 		 f_name은 process_create_initd()에서 할당 받은 페이지
 	*/
+	palloc_free_page (argv_tokens);
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
@@ -347,7 +353,10 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	bool success = false;
 	int i;
 	/* 문자열을 user stack에 복사한 위치의 주소를 담는 배열, char * 보다도 void * 가 의미에 맞음. */
-	void *arg_addr[MAX_ARGS];
+	void **arg_addr = palloc_get_page (0);
+	if (arg_addr == NULL) {
+		goto done;
+	}
 	void *argv_addr;
 
 	/* page directory를 할당한다.
@@ -514,6 +523,9 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 done:
 	/* 로드가 성공하든 실패하든 여기로 옵니다. */
+	if (arg_addr != NULL) {
+		palloc_free_page (arg_addr);
+	}
 	file_close (file);
 	return success;
 }
