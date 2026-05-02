@@ -160,6 +160,10 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 
+	char *p; // strtok_r 북마크용 포인터 변수
+	char *argv[32]; // 문자열 여러개의 시작 주소를 담는 변수
+	int argc = 0; // 인자 개수, 이게 포인터 배열이 되면 해당 정수의 주소를 담음
+
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
 	 * 그 이유는 현재 스레드가 다시 스케줄될 때
 	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. */
@@ -168,11 +172,23 @@ process_exec (void *f_name) {
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+
+	/* 문자열 공백 기준으로 파싱해서 저장하기 */
+	// 1. 첫번째 토큰 저장
+	char *token = strtok_r(f_name, " ", &p);
+	// 2. 이번에 추출한 토큰이 NULL이 아닐 경우 반복
+	while (token != NULL) {
+		argv[argc] = token; // argv 배열에 추출한 토큰 저장
+		argc++; // argc 카운트 
+		token = strtok_r(NULL, " ", &p); // 다음 토큰 추출, 두번째 토큰부터는 NULL
+	}	
+
+
 	/* 먼저 현재 컨텍스트를 종료합니다 */
 	process_cleanup ();
 
 	/* 그런 다음 바이너리를 로드합니다 */
-	success = load (file_name, &_if);
+	success = load (argv[0], &_if, argv, argc); // argv[0] = 곧 파일명, 로더가 실행함
 
 	/* 로드에 실패하면 종료합니다. */
 	palloc_free_page (file_name);
@@ -306,7 +322,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * 실행 파일의 진입점을 *RIP에 저장하고 초기 스택 포인터를 *RSP에 저장합니다.
  * 성공하면 true, 그렇지 않으면 false를 반환합니다. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
@@ -388,7 +404,7 @@ load (const char *file_name, struct intr_frame *if_) {
 				}
 				else
 					goto done;
-				break;
+				break; 
 		}
 	}
 
@@ -401,7 +417,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
-
 	success = true;
 
 done:
