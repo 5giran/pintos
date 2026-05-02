@@ -23,7 +23,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -165,36 +165,40 @@ process_exec (void *f_name) {
 	char *token;
 	char *next_token;
 	/* argv_tokens에 argument 저장과 argc 계산을 위한 변수 */
-	int i = 0;
+	int argc = 0;
 	/* strtok_r을 이용해 tokenize */
 	token = strtok_r(file_name, " ", &next_token);
-	argv_tokens[i] = token;
+	argv_tokens[argc] = token;
 
 	while(token) {
 		/* 여기서 첫 번째 인자를 NULL로 전달해야, 이미 처리한 문자열을 건너뛰고 처리*/
 		token = strtok_r(NULL, " ", &next_token);
-		i++;
-		argv_tokens[i] = token;
+		argc++;
+		argv_tokens[argc] = token;
 	}
-
-	/* 인자 개수는 현재 i 개수 (0부터 시작 했고, argv[argv] = NULL)*/
-	int argc = i;
 
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
 	 * 그 이유는 현재 스레드가 다시 스케줄될 때
-	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. */
-	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
-	_if.eflags = FLAG_IF | FLAG_MBS;
+	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. (복구할 실행 상태 저장, 스케줄링 재개용)
+	 * 아래는 user mode에서 사용자 코드 영역을 실행하고, 사용자 데이터/스택 영역을 쓰도록 준비 시키는 것.
+	 * 스레드 구조체 안의 intr_frame을 못 쓰니, 지역 변수로 새롭게 만들어주는 것이다. */
+	struct intr_frame _if; // user mode로 진입 시 CPU 레지스터들이 어떤 값이어야 하는지를 담는 임시 구조체
+	_if.ds = _if.es = _if.ss = SEL_UDSEG; // user data segment 사용
+	_if.cs = SEL_UCSEG; // user code segment 사용
+	_if.eflags = FLAG_IF | FLAG_MBS; // 인터럽트 허용 + 반드시 켜져 있어야 하는 기본 비트 설정
 
 	/* 먼저 현재 컨텍스트를 종료합니다 */
 	process_cleanup ();
 
-	/* 그런 다음 바이너리를 로드합니다 */
-	success = load (file_name, &_if);
+	/* 그런 다음 바이너리를 로드합니다 
+		 parsing 이후이기 때문에, 첫 인자로 argv_tokens[0]을 넘겨주어야 한다.
+	*/
+	success = load (argv_tokens[0], &_if, argc, argv_tokens);
 
-	/* 로드에 실패하면 종료합니다. */
+	/* 로드에 실패하면 종료합니다. 
+		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
+		 f_name은 process_create_initd()에서 할당 받은 페이지
+	*/
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
@@ -326,7 +330,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * 실행 파일의 진입점을 *RIP에 저장하고 초기 스택 포인터를 *RSP에 저장합니다.
  * 성공하면 true, 그렇지 않으면 false를 반환합니다. */
 static bool
-load (const char *file_name, struct intr_frame *if_) {
+load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]) {
 	struct thread *t = thread_current ();
 	struct ELF ehdr;
 	struct file *file = NULL;
