@@ -22,8 +22,10 @@
 #include "vm/vm.h"
 #endif
 
+#define MAX_ARGS PGSIZE / sizeof(char *) - 1
+
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -191,22 +193,59 @@ process_exec (void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
+	/* 파싱 결과 담을 배열 */
+	char **argv_tokens = palloc_get_page (0);
+	if (argv_tokens == NULL) {
+		palloc_free_page(file_name);
+		return -1;
+	}
+	/* strtok_r 함수 사용을 위한 포인터 */
+	char *token;
+	char *next_token;
+	/* argv_tokens에 argument 저장과 argc 계산을 위한 변수 */
+	int argc = 0;
+	/* strtok_r을 이용해 tokenize */
+	for (token = strtok_r (file_name, " ", &next_token);
+			 token != NULL;
+			 token = strtok_r (NULL, " ", &next_token)) {
+		/* argv_tokens[MAX_ARGS]에 접근 전에 반복문이 끝나야 함.
+		 * 그렇지 않으면, 배열의 크기보다 인자 수가 더 많은 것
+		*/		
+		if (argc == MAX_ARGS) {
+			palloc_free_page(file_name);
+			palloc_free_page(argv_tokens);
+			return -1;
+		}
+
+		argv_tokens[argc] = token;
+		argc++;
+	}
+	/* 0부터 시작했으니 배열의 argc 번째 요소는 NULL */
+	argv_tokens[argc] = NULL;
 
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
 	 * 그 이유는 현재 스레드가 다시 스케줄될 때
-	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. */
-	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
-	_if.eflags = FLAG_IF | FLAG_MBS;
+	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. (복구할 실행 상태 저장, 스케줄링 재개용)
+	 * 아래는 user mode에서 사용자 코드 영역을 실행하고, 사용자 데이터/스택 영역을 쓰도록 준비 시키는 것.
+	 * 스레드 구조체 안의 intr_frame을 못 쓰니, 지역 변수로 새롭게 만들어주는 것이다. */
+	struct intr_frame _if; // user mode로 진입 시 CPU 레지스터들이 어떤 값이어야 하는지를 담는 임시 구조체
+	_if.ds = _if.es = _if.ss = SEL_UDSEG; // user data segment 사용
+	_if.cs = SEL_UCSEG; // user code segment 사용
+	_if.eflags = FLAG_IF | FLAG_MBS; // 인터럽트 허용 + 반드시 켜져 있어야 하는 기본 비트 설정
 
 	/* 먼저 현재 컨텍스트를 종료합니다 */
 	process_cleanup ();
 
-	/* 그런 다음 바이너리를 로드합니다 */
-	success = load (file_name, &_if);
+	/* 그런 다음 바이너리를 로드합니다 
+		 parsing 이후이기 때문에, 첫 인자로 argv_tokens[0]을 넘겨주어야 한다.
+	*/
+	success = load (argv_tokens[0], &_if, argc, argv_tokens);
 
-	/* 로드에 실패하면 종료합니다. */
+	/* 로드에 실패하면 종료합니다. 
+		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
+		 f_name은 process_create_initd()에서 할당 받은 페이지
+	*/
+	palloc_free_page (argv_tokens);
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
@@ -345,63 +384,41 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * 실행 파일의 진입점을 *RIP에 저장하고 초기 스택 포인터를 *RSP에 저장합니다.
  * 성공하면 true, 그렇지 않으면 false를 반환합니다. */
 static bool
-load (const char *file_name, struct intr_frame *if_)
-{
-	
-	struct thread *t = thread_current ();	/* 현재 실행 중인 스레드 */
-	struct ELF ehdr;						/* ELF 헤더를 읽어 둘 구조체 */
-	struct file *file = NULL;				/* 실행 파일 객체 */
-	off_t file_ofs;							/* 프로그램 헤더를 읽을 파일 오프셋 */
-	bool success = false;					/* 최종 성공 여부 */
-	int i;									/* 반복문 인덱스 */
-	
-	char *argv[64];							/* 파싱된 인자 문자열 포인터 배열 */
-	char *arg_addr[64];						/* 유저 스택에 복사된 각 인자 문자열의 주소를 저장할 배열 */
-	int argc = 0;							/* 인자 개수 */	
-	char *token, *save_ptr;					/* strtok_r용 변수 */
+load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]) {
+	struct thread *t = thread_current ();
+	struct ELF ehdr;
+	struct file *file = NULL;
+	off_t file_ofs;
+	bool success = false;
+	int i;
+	/* 문자열을 user stack에 복사한 위치의 주소를 담는 배열, char * 보다도 void * 가 의미에 맞음. */
+	void **arg_addr = palloc_get_page (0);
+	if (arg_addr == NULL) {
+		goto done;
+	}
+	void *argv_addr;
 
-	/* file_name을 수정 가능한 포인터로 받는다.
-	   strtok_r가 문자열을 직접 끊기 때문이다. */
-	char *cmd_line = (char *) file_name;
-
-	/* 새 프로세스용 page table 생성 */
+	/* page directory를 할당한다.
+		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말
+	*/
 	t->pml4 = pml4_create ();
 
 	/* 실패하면 load 실패 */
 	if (t->pml4 == NULL)
 		goto done;
-
-	/* 새 page table 활성화 */
+	/* 현재 스레드의 페이지 테이블 활성화
+		 이제 CPU가 이 프로그램의 page table을 기준으로 물리 주소 <-> 가상 주소 변환
+	*/
 	process_activate (thread_current ());
 
-	/* 명령줄을 공백 기준으로 잘라 argv에 저장한다.
-	   예: "echo hello world" -> argv[0], argv[1], argv[2] */
-	for (token = strtok_r (cmd_line, " ", &save_ptr);
-		 token != NULL;
-		 token = strtok_r (NULL, " ", &save_ptr)) {
-
-		/* 너무 많은 인자는 여기서는 그냥 실패 처리 */
-		if (argc >= 64)
-			goto done;
-
-		/* 토큰 저장 후 argc 증가 */
-		argv[argc++] = token;
-	}
-
-	/* 인자가 하나도 없으면 실행 파일 이름도 없는 것이므로 실패 */
-	if (argc == 0)
-		goto done;
-
-	/* 실행 파일은 전체 명령줄이 아니라 argv[0]으로 연다. */
-	file = filesys_open (argv[0]);
-
-	/* 파일 열기 실패 시 종료 */
+	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
+	file = filesys_open (file_name);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", argv[0]);
 		goto done;
 	}
 
-	/* ELF 헤더를 읽고 정상 실행 파일인지 검사한다. */
+	/* ELF(실행 파일) 헤더를 읽고, 진짜 실행 가능한 ELF 파일인지 검증 */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -413,7 +430,9 @@ load (const char *file_name, struct intr_frame *if_)
 		goto done;
 	}
 
-	/* 프로그램 헤더 테이블 시작 위치 */
+	/* 프로그램 헤더를 순회하며 읽습니다.
+		 ELF 안에 있는 "어느 부분을 메모리에 올릴지" 설명서를 하나씩 읽는 것
+	*/
 	file_ofs = ehdr.e_phoff;
 
 	/* 각 프로그램 헤더를 순회하며 메모리에 적재할 세그먼트를 찾는다. */
@@ -448,11 +467,15 @@ load (const char *file_name, struct intr_frame *if_)
 			case PT_INTERP:
 			case PT_SHLIB:
 				goto done;
-
-			/* 실제 적재해야 하는 세그먼트 */
+			/* PT_LOAD 타입 세그먼트만 실제 메모리에 올린다.
+				 ELF 파일 내부에서도 실제 실행에 필요한 code/data 구역만 메모리에 올리는 것
+			*/	
 			case PT_LOAD:
+				/* 각 세그먼트는 validate_segment()로 주소와 크기 검증
+					 이 구역을 사용자 메모리에 올려도 안전한지 확인하는 것
+				*/
 				if (validate_segment (&phdr, file)) {
-					/* 쓰기 가능 여부 */
+					/* load_segment()가 파일에서 읽을 바이트와 0으로 채울 바이트를 계산 */
 					bool writable = (phdr.p_flags & PF_W) != 0;
 
 					/* 파일 시작 페이지 경계 */
@@ -489,73 +512,81 @@ load (const char *file_name, struct intr_frame *if_)
 		}
 	}
 
-	/* 유저 스택 1페이지 생성 */
+	/* setup_stack()으로 사용자 스택 최상단 아래 1페이지를 매핑한다.
+		 사용자 프로그램이 쓸 스택 공간 1페이지를 만들어주는 것
+	*/
 	if (!setup_stack (if_))
 		goto done;
 
-	/* 사용자 프로그램 시작 주소를 RIP에 넣는다. */
+	/* ELF 엔트리 주소를 if_->rip에 저장
+		 프로그램이 처음 실행될 시작 주소를 CPU 상태에 넣어두는 것
+	*/
 	if_->rip = ehdr.e_entry;
 
-	/* 인자 문자열들을 역순으로 스택에 복사한다.
-	   역순으로 해야 스택 아래쪽부터 argv[0], argv[1] 순서를 맞추기 쉽다. */
-	for (i = argc - 1; i >= 0; i--) {
-		/* 문자열 길이 + '\0' */
-		size_t len = strlen (argv[i]) + 1;
+	/* TODO: 여기에 코드를 작성하세요.
+	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
+	uintptr_t rsp = if_->rsp;
 
-		/* 스택 포인터를 문자열 크기만큼 내린다. */
-		if_->rsp -= len;
-
-		/* 실제 문자열 내용을 유저 스택에 복사 */
-		memcpy ((void *) if_->rsp, argv[i], len);
-
-		/* 복사된 문자열의 유저 주소를 저장 */
-		arg_addr[i] = (char *) if_->rsp;
+	/* 스택에 인자 문자열 자체를 먼저 복사해 push */
+	for (int i = argc - 1; i >= 0; i--) {
+		int len = strlen(argv_tokens[i]) + 1; // 문자열 끝 \0 포함
+		rsp -= len; // 문자열 길이만큼 메모리 낮은 주소로 가서 높은 주소 방향으로 문자열 복사
+		if (rsp < USER_STACK - PGSIZE) {
+			goto done; // rsp가 계속 작아지다가 USER_STACK - PGSIZE 보다 작아지면, 할당된 스택 page 바깥이라 잘못된 접근
+		} 
+		memcpy((void *) rsp, argv_tokens[i], len);
+		arg_addr[i] = (void *) rsp;
 	}
-
-	/* argv 배열 자체가 8바이트 정렬되도록 패딩 삽입 */
-	while (if_->rsp % 8 != 0) {
-		if_->rsp -= 1;
-		*(uint8_t *) if_->rsp = 0;
+	/* rsp는 원래 uintptr_t 타입이므로, rsp를 8로 나눈 나머지를 원래 rsp에서 빼주면 8의 배수로 내림 정렬이 된다.*/
+	rsp -= (rsp % 8);
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
 	}
-
-	/* argv[argc] = NULL 넣기 */
-	if_->rsp -= 8;
-	*(uint64_t *) if_->rsp = 0;
-
-	/* argv 포인터 배열을 역순으로 push
-	   최종적으로 메모리상에는 argv[0], argv[1], ... 순서가 된다. */
-	for (i = argc - 1; i >= 0; i--) {
-		if_->rsp -= 8;
-		*(uint64_t *) if_->rsp = (uint64_t) arg_addr[i];
+	/* NULL pointer 크기 만큼 rsp 내려감 */
+	rsp -= 8;
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
 	}
-
-	/* rsi = argv
-	   즉 argv 배열의 시작 주소를 넘긴다. */
-	if_->R.rsi = if_->rsp;
-
-	/* rdi = argc
-	   첫 번째 인자인 argc를 넘긴다. */
-	if_->R.rdi = argc;
-
-	/* fake return address 하나 넣는다. */
-	if_->rsp -= 8;
-	*(uint64_t *) if_->rsp = 0;
-
-	/* 디버깅용 출력입니다.
-	 * printf ("argc = %d\n", argc);
-	 * printf ("argv = %p\n", if_->R.rsi);
-	 * printf ("rsp  = %p\n", if_->rsp);
-	 * for (i = 0; i < argc; i++)
-     * printf ("arg_addr[%d] = %p -> %s\n", i, arg_addr[i], arg_addr[i]);
-	 * hex_dump ((uintptr_t) if_->rsp, (void *) if_->rsp,
-     *       (size_t) ((uint8_t *) USER_STACK - (uint8_t *) if_->rsp), true);
+	/* argv[argc] = NULL 
+	 * uintptr_t는 주소를 담을 수 있는 정수 타입이다.
+	 * 해야하는 작업은, 이 정수를 주소로 보고 -> 그 주소를 가리키는 포인터를 통해 그 주소의 내용을 NULL로 만들어주는 것
+	 * 그래서 uintptr_t 로 casting이 먼저 필요, 이후 안의 내용을 역참조(*)하여 그 값에 NULL 대입
 	 */
+	*(uintptr_t *) rsp = 0;
 
-	/* 여기까지 오면 로딩 성공 */
+	/* 스택에 각 인자 문자열 주소를 push 
+	 * 이 스택 주소에는 char * 값 하나가 저장되어야한다. (실제 문자열의 주소)
+	 * 그러면 rsp는 char * 타입의 데이터를 담고 있는 주소니까, char ** 타입이고, 그 안의 내용을 arg_addr[i]로 대입해주어야 하니 역참조 필요
+	 */
+	for (int i = argc - 1; i >= 0; i--) {
+		rsp -= 8;
+		if (rsp < USER_STACK - PGSIZE) {
+			goto done;
+		}
+		*(char **) rsp = arg_addr[i];
+	}
+
+	/* 현재 rsp 포인터가 argv 배열 시작 주소 */
+	argv_addr = (void *) rsp;
+
+	rsp -= 8;
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
+	}
+	/* fake return address */
+	*(uintptr_t *) rsp = 0;
+
+	if_->R.rdi = (uint64_t) argc;
+	if_->rsp = (uint64_t) rsp;
+	if_->R.rsi = (uint64_t) argv_addr;
+
 	success = true;
 
 done:
-	/* file이 NULL이어도 안전하게 처리된다. */
+	/* 로드가 성공하든 실패하든 여기로 옵니다. */
+	if (arg_addr != NULL) {
+		palloc_free_page (arg_addr);
+	}
 	file_close (file);
 
 	/* 최종 성공 여부 반환 */
@@ -643,23 +674,23 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* 메모리 페이지를 가져옵니다. */
+		/* 메모리 페이지를 가져옵니다. 사용자 프로그램용 물리 메모리 1페이지를 가져온다. */
 		uint8_t *kpage = palloc_get_page (PAL_USER);
 		if (kpage == NULL)
 			return false;
 
-		/* 이 페이지를 로드합니다. */
-		if (file_read (file, kpage, page_read_bytes) != (int)page_read_bytes)
-		{
+		/* 이 페이지를 로드합니다. 실행 파일 내용을 일단 커널이 접근 가능한 메모리에 읽어옴  */
+		if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
 			palloc_free_page (kpage);
 			return false;
 		}
 		memset (kpage + page_read_bytes, 0, page_zero_bytes);
 
-		/* 페이지를 프로세스의 주소 공간에 추가합니다. */
-		if (!install_page (upage, kpage, writable))
-		{
-			printf ("fail\n");
+		/* 페이지를 프로세스의 주소 공간에 추가합니다. 
+			 사용자 주소 upage가 실제 메모리 kpage를 가리키게 주소표에 등록
+		*/
+		if (!install_page (upage, kpage, writable)) {
+			printf("fail\n");
 			palloc_free_page (kpage);
 			return false;
 		}
