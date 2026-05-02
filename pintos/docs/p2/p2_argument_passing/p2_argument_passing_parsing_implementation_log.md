@@ -4,7 +4,7 @@
 
 Project 2의 첫 번째 관문은 커널이 사용자 프로그램을 실행할 때 명령줄을 실행 파일 이름과 인자로 나누고, 이후 사용자 스택에 `argc`와 `argv`를 올바르게 배치하는 것이다.
 
-이번 기록은 그중 `process_exec()`에서 명령줄을 파싱하고, 파싱 결과를 `load()`로 전달하는 단계까지를 정리한다. 실제 사용자 스택에 문자열과 포인터 배열을 push하고 `RDI`, `RSI`, `RSP` 레지스터를 설정하는 작업은 아직 `load()` 내부 TODO로 남아 있다.
+이번 기록은 그중 `process_exec()`에서 명령줄을 파싱하고, 파싱 결과를 `load()`로 전달하는 단계를 정리한다. 실제 사용자 스택에 문자열과 포인터 배열을 push하고 `RDI`, `RSI`, `RSP` 레지스터를 설정하는 loading 작업은 이후 구현되었고, 별도 문서인 `p2_argument_passing_loading_implementation_log.md`에 정리한다.
 
 이번 Parsing 구현은 다음 커밋 흐름으로 진행되었다.
 
@@ -14,6 +14,7 @@ Project 2의 첫 번째 관문은 커널이 사용자 프로그램을 실행할 
 fd61cff refactor(arg pass): refactored tokenization logic in process_exec()
 45ee843 fix(arg pass): fixed typo in tokenization logic
 2d600bf refactor(arg pass): changed MAX_ARGS number to 32, completed parsing logic
+807c587 refactor(arg pass): allocate argument buffers with palloc
 ```
 
 현재 브랜치의 Parsing 구현 기준 파일은 `pintos/userprog/process.c`다.
@@ -41,10 +42,10 @@ argc = 2
 
 ### `MAX_ARGS` 추가
 
-최신 구현에서는 인자 개수 상한을 상수로 분리했다.
+최신 구현에서는 인자 개수 상한을 한 페이지에 들어가는 포인터 개수 기준으로 잡는다.
 
 ```c
-#define MAX_ARGS 32
+#define MAX_ARGS PGSIZE / sizeof(char *) - 1
 ```
 
 공개 테스트에서 가장 많은 인자를 사용하는 케이스는 `args-many`이고, 이때 `argc`는 23이다.
@@ -54,20 +55,20 @@ args-many a b c d e f g h i j k l m n o p q r s t u v
 argc = 23
 ```
 
-처음에는 더 넉넉하게 64칸 배열을 검토했지만, 현재 구현은 공개 테스트 최대치 23보다 여유가 있는 32개 토큰을 상한으로 잡았다. 배열은 `argv_tokens[MAX_ARGS + 1]`로 선언한다. 마지막 한 칸은 `argv_tokens[argc] = NULL`을 저장하기 위한 자리다.
+처음에는 고정 크기 지역 배열을 검토했고, 중간 단계에서는 32개 토큰을 상한으로 잡았다. 최신 커밋 `807c587`에서는 `argv_tokens`를 커널 스택 지역 배열로 두지 않고 `palloc_get_page()`로 한 페이지를 할당한다. 마지막 한 칸은 `argv_tokens[argc] = NULL`을 저장하기 위한 자리다.
 
 ```c
-char *argv_tokens[MAX_ARGS + 1];
+char **argv_tokens = palloc_get_page (0);
 ```
 
-주의: 구현 중 남아 있는 주석에 "64로 구현"이라는 표현이 있을 수 있다. 최신 코드 기준의 실제 상한은 `MAX_ARGS = 32`이므로, 빌드 전 주석도 상수와 맞게 정리하는 것이 좋다.
+한 페이지가 4096바이트이고 포인터가 8바이트라면 512칸을 담을 수 있다. 이 중 한 칸은 NULL sentinel을 위해 남겨 두므로 실제 토큰 상한은 511개다.
 
 따라서 현재 의미는 다음과 같다.
 
 ```text
 실제 토큰 최대 개수: MAX_ARGS
 NULL sentinel 자리: argv_tokens[MAX_ARGS]
-전체 배열 크기: MAX_ARGS + 1
+전체 할당 크기: palloc_get_page()로 받은 1페이지
 ```
 
 ### `load()` 시그니처 변경
@@ -125,6 +126,7 @@ for (token = strtok_r (file_name, " ", &next_token);
 ```c
 if (argc == MAX_ARGS) {
     palloc_free_page (file_name);
+    palloc_free_page (argv_tokens);
     return -1;
 }
 ```
@@ -159,7 +161,7 @@ success = load (argv_tokens[0], &_if, argc, argv_tokens);
 ```text
 argv_tokens[0] = 첫 번째 토큰 문자열 주소, 타입은 char *
 argv_tokens = 토큰 포인터 배열의 시작 주소, 타입은 char **
-&argv_tokens = 배열 전체의 주소, 타입은 char *(*)[MAX_ARGS + 1]
+&argv_tokens = argv_tokens 지역 변수 자체의 주소, 타입은 char ***
 ```
 
 이번 구현에서는 실행 파일 이름과 인자 목록이 모두 필요하므로 `argv_tokens[0]`, `argc`, `argv_tokens`를 모두 넘긴다.
@@ -169,10 +171,13 @@ argv_tokens = 토큰 포인터 배열의 시작 주소, 타입은 char **
 `file_name`은 `process_create_initd()`에서 할당된 `fn_copy` 페이지다. `process_exec()`에서 직접 할당하지 않았더라도 이 함수가 사용을 끝낸 뒤 해제해야 한다.
 
 ```c
+palloc_free_page (argv_tokens);
 palloc_free_page (file_name);
 ```
 
-단, `argv_tokens[i]`는 모두 `file_name` 페이지 내부를 가리킨다. 그러므로 `load()`가 사용자 스택 구성을 끝내기 전에 `file_name`을 해제하면 안 된다. 현재 흐름에서는 `load()`가 반환한 뒤 `palloc_free_page(file_name)`을 호출하므로, `load()` 내부에서 인자 문자열을 사용자 스택에 복사하는 데 사용할 수 있다.
+`argv_tokens` 페이지도 `process_exec()`에서 할당했으므로 `load()` 반환 뒤 해제한다.
+
+단, `argv_tokens[i]`는 모두 `file_name` 페이지 내부를 가리킨다. 그러므로 `load()`가 사용자 스택 구성을 끝내기 전에 `file_name`을 해제하면 안 된다. 현재 흐름에서는 `load()`가 반환한 뒤 `argv_tokens`와 `file_name`을 해제하므로, `load()` 내부에서 인자 문자열을 사용자 스택에 복사하는 데 사용할 수 있다.
 
 ## 4. 구현하면서 확정한 흐름
 
@@ -181,7 +186,7 @@ palloc_free_page (file_name);
 ```text
 process_exec(f_name)
   file_name = f_name
-  argv_tokens 준비
+  argv_tokens = palloc_get_page(0)
   strtok_r(file_name, " ", &next_token)로 토큰화
   argc 계산
   argv_tokens[argc] = NULL
@@ -189,6 +194,7 @@ process_exec(f_name)
   process_cleanup()
   success = load(argv_tokens[0], &_if, argc, argv_tokens)
 
+  palloc_free_page(argv_tokens)
   palloc_free_page(file_name)
   if !success:
       return -1
@@ -208,7 +214,7 @@ load(file_name, if_, argc, argv_tokens)
   if_->rip = ELF entry
 ```
 
-현재 완료된 부분은 `process_exec()`의 파싱과 `load()`로 전달하는 부분이다. 다음 단계는 `load()` 내부에서 `setup_stack(if_)` 이후 실제 사용자 스택과 레지스터를 설정하는 것이다.
+현재 parsing 흐름은 `palloc_get_page()`로 할당한 `argv_tokens` 페이지를 사용하고, `load()` 반환 뒤 `argv_tokens`와 `file_name`을 함께 해제하는 구조다.
 
 ## 5. 커밋별 구현 변화
 
@@ -266,19 +272,30 @@ if (argc == MAX_ARGS)
 
 `MAX_ARGS` 값을 63에서 32로 줄였다. 공개 테스트의 최대 `argc`가 23이므로, 32는 충분한 여유를 가지면서도 커널 스택에 올리는 임시 포인터 배열 크기를 더 작게 유지한다.
 
+### `807c587 refactor(arg pass): allocate argument buffers with palloc`
+
+`argv_tokens`를 커널 스택 배열에서 `palloc_get_page()`로 할당한 페이지로 옮겼다. 이에 따라 `MAX_ARGS`도 고정값 32가 아니라 한 페이지에 들어갈 수 있는 포인터 수 기준으로 바꾸었다.
+
+```c
+#define MAX_ARGS PGSIZE / sizeof(char *) - 1
+```
+
+이 커밋 이후 `process_exec()`의 실패/정상 경로는 `argv_tokens` 페이지 해제를 책임져야 한다.
+
 최신 구조에서는 다음이 성립한다.
 
 ```text
 argv_tokens[0] ~ argv_tokens[argc - 1] = 실제 토큰
 argv_tokens[argc] = NULL
 argc <= MAX_ARGS
+argv_tokens 페이지는 load() 반환 뒤 palloc_free_page()로 해제
 ```
 
-## 6. 현재 남은 작업
+## 6. Loading 단계로 이어진 작업
 
-Parsing 단계 다음에는 `load()` 안에서 Argument Passing의 실제 스택 구성을 구현해야 한다.
+Parsing 단계 다음에 남아 있던 `load()` 안의 사용자 스택 구성은 이후 loading 커밋들에서 구현되었다.
 
-남은 작업은 다음이다.
+이어진 작업은 다음이다.
 
 ```text
 1. argv_tokens 문자열들을 사용자 스택에 복사한다.
@@ -293,4 +310,4 @@ Parsing 단계 다음에는 `load()` 안에서 Argument Passing의 실제 스택
 10. 실패 시 success = true로 가지 않고 load 실패로 처리한다.
 ```
 
-특히 `argv_tokens`에 들어 있는 주소는 커널 페이지 주소다. 사용자 프로그램의 `argv[i]`에 이 주소를 그대로 넣으면 안 된다. 문자열 내용을 사용자 스택에 복사하고, 그 사용자 가상 주소를 `argv[i]`로 넣어야 한다.
+특히 `argv_tokens`에 들어 있는 주소는 커널 페이지 주소다. 사용자 프로그램의 `argv[i]`에 이 주소를 그대로 넣으면 안 된다. 문자열 내용을 사용자 스택에 복사하고, 그 사용자 가상 주소를 `argv[i]`로 넣어야 한다. 이 내용은 loading 구현 기록과 debug notes에서 별도로 정리했다.

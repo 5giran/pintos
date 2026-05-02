@@ -19,25 +19,31 @@ argv_tokens[2] -> "b"
 
 따라서 배열 원소 타입은 `char *`다. 즉 `argv_tokens`는 `char *` 배열이다.
 
+최신 구현에서는 `argv_tokens`를 지역 배열로 두지 않고 `palloc_get_page()`로 한 페이지를 할당한다.
+
 ```c
-char *argv_tokens[MAX_ARGS + 1];
+char **argv_tokens = palloc_get_page (0);
 ```
 
-고정 크기 배열로 충분하다고 판단했다. 이유는 다음과 같다.
+처음에는 고정 크기 배열로 충분하다고 판단했다. 이유는 다음과 같았다.
 
 - PintOS 명령줄은 `process_create_initd()`에서 한 페이지 복사본으로 전달된다.
 - 공개 테스트에서 가장 많은 인자를 사용하는 `args-many`의 `argc`는 23이다.
 - `argv_tokens`에는 문자열 전체가 아니라 포인터만 들어간다.
 - 사용자 스택에는 실제 `argc`만큼만 복사하므로, 배열 capacity가 크다고 그만큼 사용자 스택을 차지하지 않는다.
 
-처음에는 64칸 정도를 검토했지만, 최신 구현에서는 `MAX_ARGS = 32`로 정리했다. 32는 공개 테스트 최대 23보다 여유가 있고, 커널 스택에 놓이는 포인터 배열 크기도 작게 유지한다.
+이후 `807c587`에서 임시 포인터 배열을 커널 스택에 두지 않고 `palloc` 페이지로 옮겼다. 이에 따라 `MAX_ARGS`도 고정값 32가 아니라 한 페이지에 들어가는 포인터 개수 기준으로 바뀌었다.
 
-주의: `process.c`의 설명 주석에 아직 64를 기준으로 한 문장이 남아 있다면 최신 상수와 맞지 않는 오래된 설명이다. 실제 판단 기준은 `MAX_ARGS` 값이고, 현재는 32개 토큰과 NULL sentinel 1칸을 기준으로 본다.
+```c
+#define MAX_ARGS PGSIZE / sizeof(char *) - 1
+```
+
+한 페이지가 4096바이트이고 포인터가 8바이트라면 512칸을 담을 수 있다. 이 중 한 칸은 `argv_tokens[argc] = NULL` sentinel을 위해 남겨 두므로 실제 토큰 상한은 511개다.
 
 중요한 점은 배열 크기와 실제 사용량이 다르다는 것이다.
 
 ```text
-배열 capacity: MAX_ARGS + 1
+할당 capacity: palloc_get_page()로 받은 1페이지
 실제 토큰 개수: argc
 사용자 스택에 복사할 문자열: argv_tokens[0]부터 argv_tokens[argc - 1]까지만
 NULL sentinel: argv_tokens[argc]
@@ -161,9 +167,9 @@ initd(f_name)
 
 단, `load()`가 사용자 스택 구성을 끝내기 전에 `file_name`을 해제하면 안 된다.
 
-## 6. `palloc_free_page(file_name)`이 필요한가
+## 6. `palloc_free_page(file_name)`과 `palloc_free_page(argv_tokens)`가 필요한가
 
-필요하다. `process_exec()` 안에서 직접 `palloc_get_page()`를 호출하지 않았더라도, `f_name`은 위 호출 경로에서 이미 할당된 페이지다.
+둘 다 필요하다. `file_name`은 `process_exec()` 안에서 직접 할당한 페이지는 아니지만, `f_name`은 위 호출 경로에서 이미 할당된 페이지다.
 
 ```text
 f_name == file_name
@@ -182,6 +188,19 @@ palloc_free_page (file_name);
 ```
 
 `strtok_r()`는 문자열 내부의 공백을 `'\0'`으로 바꿀 뿐, `file_name` 포인터 변수 자체를 다른 주소로 바꾸지 않는다. 그러므로 `palloc_free_page(file_name)`은 여전히 올바른 페이지 시작 주소를 해제한다.
+
+최신 구현에서는 `argv_tokens`도 `process_exec()`에서 직접 할당한다.
+
+```c
+char **argv_tokens = palloc_get_page (0);
+```
+
+따라서 `load()`가 반환한 뒤에는 `argv_tokens`도 함께 해제해야 한다.
+
+```c
+palloc_free_page (argv_tokens);
+palloc_free_page (file_name);
+```
 
 ## 7. `load()`에는 정확히 무엇을 넘겨야 하는가
 
@@ -220,10 +239,10 @@ argv_tokens
 
 ## 8. `argv_tokens`, `argv_tokens[0]`, `&argv_tokens`의 차이
 
-배열 선언이 다음과 같다고 하자.
+최신 구현의 선언은 다음과 같다.
 
 ```c
-char *argv_tokens[MAX_ARGS + 1];
+char **argv_tokens = palloc_get_page (0);
 ```
 
 각 표현의 의미는 다르다.
@@ -234,15 +253,15 @@ argv_tokens[0]
   타입: char *
 
 argv_tokens
-  첫 번째 원소의 주소로 decay된 값
+  토큰 포인터들이 저장된 페이지의 시작 주소
   타입: char **
 
 &argv_tokens
-  배열 전체의 주소
-  타입: char *(*)[MAX_ARGS + 1]
+  argv_tokens 변수 자체의 주소
+  타입: char ***
 ```
 
-`load()`가 필요한 것은 토큰 포인터 배열을 순회할 수 있는 값이므로 `argv_tokens`를 넘긴다. `&argv_tokens`는 배열 전체의 주소라서 이번 목적과 맞지 않는다.
+`load()`가 필요한 것은 토큰 포인터 배열을 순회할 수 있는 페이지 시작 주소이므로 `argv_tokens`를 넘긴다. `&argv_tokens`는 `argv_tokens` 지역 변수 자체의 주소라서 이번 목적과 맞지 않는다.
 
 ## 9. 파싱 후에도 `file_name`을 `load()`에 넘겨도 되는가
 
@@ -369,7 +388,7 @@ make
 ```text
 토큰을 얻는다.
 저장하기 전에 argc가 MAX_ARGS인지 확인한다.
-상한이면 file_name을 해제하고 -1을 반환한다.
+상한이면 file_name과 argv_tokens를 해제하고 -1을 반환한다.
 상한이 아니면 argv_tokens[argc]에 저장한다.
 ```
 
@@ -382,15 +401,16 @@ make
 ```text
 argv_tokens는 char * 배열이다.
 argv_tokens에는 문자열 내용이 아니라 token 시작 주소를 저장한다.
-argv_tokens capacity는 MAX_ARGS + 1이다.
+argv_tokens는 palloc_get_page()로 할당한 1페이지에 저장한다.
 MAX_ARGS는 실제 토큰 최대 개수다.
+MAX_ARGS는 PGSIZE / sizeof(char *) - 1이다.
 argv_tokens[argc] = NULL을 유지한다.
 사용자 스택에는 argv_tokens[0..argc-1]만 문자열로 복사한다.
 사용자 스택에도 argv[argc] = NULL이 되도록 null pointer를 별도로 push한다.
 process_exec()는 parsing까지만 담당한다.
 load()는 빈 스택 생성 이후 user stack과 register setting을 담당한다.
 file_name은 process_create_initd()에서 받은 page copy이므로 strtok_r()로 수정해도 된다.
-file_name은 load()가 argument stack 구성을 끝낸 뒤 palloc_free_page()로 해제한다.
+file_name과 argv_tokens는 load()가 argument stack 구성을 끝낸 뒤 palloc_free_page()로 해제한다.
 load()에는 argv_tokens[0], &_if, argc, argv_tokens를 넘긴다.
 Project 2는 pintos/userprog에서 빌드해야 USERPROG와 pml4가 활성화된다.
 ```
