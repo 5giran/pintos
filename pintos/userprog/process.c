@@ -346,6 +346,8 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	off_t file_ofs;
 	bool success = false;
 	int i;
+	/* 문자열을 user stack에 복사한 위치의 주소를 담는 배열, char * 보다도 void * 가 의미에 맞음. */
+	void *arg_addr[MAX_ARGS];
 
 	/* page directory를 할당한다.
 		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말
@@ -452,7 +454,18 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
+	uintptr_t rsp = if_->rsp;
 
+	for (int i = argc - 1; i >= 0; i--) {
+		int len = strlen(argv_tokens[i]) + 1; // 문자열 끝 \0 포함
+		rsp -= len; // 문자열 길이만큼 메모리 낮은 주소로 가서 높은 주소 방향으로 문자열 복사
+		if (rsp < USER_STACK - PGSIZE) {
+			goto done; // rsp가 계속 작아지다가 USER_STACK - PGSIZE 보다 작아지면, 할당된 스택 page 바깥이라 잘못된 접근
+		} 
+		memcpy((void *) rsp, argv_tokens[i], len);
+		arg_addr[i] = (void *) rsp;
+	}
+	
 	success = true;
 
 done:
