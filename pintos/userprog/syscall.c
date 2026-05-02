@@ -28,15 +28,18 @@ static void check_address (const void *addr);
 #define MSR_SYSCALL_MASK 0xc0000084 /* eflags용 마스크 */
 
 void
-syscall_init (void) {
+syscall_init (void) 
+{
 	/* syscall 진입 시 사용할 코드 세그먼트 정보 설정 */
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
+			
 	/* syscall 명령이 들어오면 어디로 점프할지 설정 */
 	write_msr (MSR_LSTAR, (uint64_t) syscall_entry);
+	
 	/* syscall_entry가 userland stack을 kernel mode stack으로 바꿀 때까지 interrupt
-	 * service routine은 어떤 interrupt도 처리해서는 안 된다. 따라서 FLAG_FL을 마스킹했다. */
-	/* syscall 진입 중 마스킹할 플래그 설정 */
+	 * service routine은 어떤 interrupt도 처리해서는 안 된다. 따라서 FLAG_FL을 마스킹했다.
+	 * syscall 진입 중 마스킹할 플래그 설정 */
 	write_msr (MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
@@ -46,7 +49,8 @@ syscall_init (void) {
 /* 시스템콜 인자들이 syscall_handler에 일반 함수 인자처럼 들어오는 게 아니라, 
  * f 안에 저장된 레지스터 값으로 들어온다. */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f UNUSED) 
+{
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
 	switch (f->R.rax) {
@@ -102,7 +106,8 @@ syscall_handler (struct intr_frame *f UNUSED) {
 }
 
 static void
-exit_with_status (int status) {
+exit_with_status (int status) 
+{
 	/* 종료 메시지 출력 */
 	printf ("%s: exit(%d)\n", thread_name (), status);
 
@@ -111,7 +116,8 @@ exit_with_status (int status) {
 }
 
 static void
-check_address (const void *addr) {
+check_address (const void *addr) 
+{
 	/* NULL 이거나 유저 가상주소 범위 밖이면 비정상 종료 */
 	if (addr == NULL || !is_user_vaddr (addr))
 		exit_with_status (-1);
