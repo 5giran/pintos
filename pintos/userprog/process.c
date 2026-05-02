@@ -162,7 +162,7 @@ process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
 	/* 파싱 결과 담을 배열 */
-	char *argv_tokens[MAX_ARGS + 1]; //	테스트 케이스 분석 결과, 가장 많은 인자 개수는 23 이지만, 여유 있게 64로 구현
+	char *argv_tokens[MAX_ARGS + 1]; //	테스트 케이스 분석 결과, 가장 많은 인자 개수는 23 이지만, 여유 있게 32로 구현
 	/* strtok_r 함수 사용을 위한 포인터 */
 	char *token;
 	char *next_token;
@@ -464,6 +464,11 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 		} 
 		memcpy((void *) rsp, argv_tokens[i], len);
 		arg_addr[i] = (void *) rsp;
+	}
+	/* rsp는 원래 uintptr_t 타입이므로, rsp를 8로 나눈 나머지를 원래 rsp에서 빼주면 8의 배수로 내림 정렬이 된다.*/
+	rsp -= (rsp % 8);
+	if (rsp < USER_STACK - PGSIZE) {
+			goto done;
 	}
 	
 	success = true;
