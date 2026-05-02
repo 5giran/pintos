@@ -414,7 +414,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
-		printf ("load: %s: open failed\n", argv[0]);
+		printf ("load: %s: open failed\n", argv_tokens[0]);
 		goto done;
 	}
 
@@ -426,7 +426,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", argv[0]);
+		printf ("load: %s: error loading executable\n", argv_tokens[0]);
 		goto done;
 	}
 
