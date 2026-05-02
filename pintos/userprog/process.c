@@ -159,6 +159,26 @@ int
 process_exec (void *f_name) {
 	char *file_name = f_name;
 	bool success;
+	/* 파싱 결과 담을 배열 */
+	char *argv_tokens[64]; //	테스트 케이스 분석 결과, 가장 많은 인자 개수는 23 이지만, 여유 있게 64로 구현
+	/* strtok_r 함수 사용을 위한 포인터 */
+	char *token;
+	char *next_token;
+	/* argv_tokens에 argument 저장과 argc 계산을 위한 변수 */
+	int i = 0;
+	/* strtok_r을 이용해 tokenize */
+	token = strtok_r(file_name, " ", &next_token);
+	argv_tokens[i] = token;
+
+	while(token) {
+		/* 여기서 첫 번째 인자를 NULL로 전달해야, 이미 처리한 문자열을 건너뛰고 처리*/
+		token = strtok_r(NULL, " ", &next_token);
+		i++;
+		argv_tokens[i] = token;
+	}
+
+	/* 인자 개수는 현재 i 개수 (0부터 시작 했고, argv[argv] = NULL)*/
+	int argc = i;
 
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
 	 * 그 이유는 현재 스레드가 다시 스케줄될 때
