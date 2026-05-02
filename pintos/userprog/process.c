@@ -470,6 +470,14 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	if (rsp < USER_STACK - PGSIZE) {
 			goto done;
 	}
+	/* NULL pointer 크기 만큼 rsp 내려감 */
+	rsp -= 8;
+	/* argv[argc] = NULL 
+	 * uintptr_t는 주소를 담을 수 있는 정수 타입이다.
+	 * 해야하는 작업은, 이 정수를 주소로 보고 -> 그 주소를 가리키는 포인터를 통해 그 주소의 내용을 NULL로 만들어주는 것
+	 * 그래서 uintptr_t 로 casting이 먼저 필요, 이후 안의 내용을 역참조(*)하여 그 값에 NULL 대입
+	 */
+	*(uintptr_t *) rsp = NULL; 
 	
 	success = true;
 
