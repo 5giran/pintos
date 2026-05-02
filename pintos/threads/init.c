@@ -238,6 +238,7 @@ run_task (char **argv) {
 	const char *task = argv[1];
 
 	printf ("Executing '%s':\n", task);
+	printf ("RUN_TASK-1: %s\n", task);
 #ifdef USERPROG
 	if (thread_tests){
 		run_test (task);
