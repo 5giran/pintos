@@ -22,7 +22,7 @@
 #include "vm/vm.h"
 #endif
 
-#define MAX_ARGS 63
+#define MAX_ARGS 32
 
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
