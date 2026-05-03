@@ -409,6 +409,7 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 	}
 
 	/* 스택을 설정합니다. */
+	// if_->rsp = USER_STACK; 함수 안에 내장됨, 초기값
 	if (!setup_stack (if_))
 		goto done;
 
@@ -417,6 +418,45 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
+
+	// 삽입한 문자열 주소 저장 배열
+	char *ad_arr[argc];
+	// if_->rsp는 포인터가 아니라 정수이므로 
+
+	/* 입력된 문자열 자체 삽입 */
+	for (int i = 0; i < argc; i++) {
+		// if_->rsp 문자열 넣을 주소 만큼 줄여주기
+		if_->rsp -= strlen(argv[i])+1;
+		// 문자열 스택에 삽입
+		// 첫번째 매개변수가 포인터를 가리키므로 포인터로 캐스팅 해놔야한다.
+		memcpy((char *) if_->rsp, argv[i], strlen(argv[i])+1);
+		// 스택에 삽입한 문자열 주소 배열에 따로 기록
+		// if_->rsp가 삽입한 문자열 주소 배열이 되는건 맞는데 포인터여야 하니까 타입 캐스팅
+		ad_arr[i] = (char *) if_->rsp;
+	}
+
+	/* 8의 배수 맞춰서 주소 패딩 넣기 */
+	// rsp는 정수기때문에 이렇게 주소 정수값만 수정해줘도 된다. 따로 패딩 넣는 과정이 필요 없다.
+	if_->rsp = if_->rsp - (if_->rsp % 8);
+
+	/* 맨 끝에 NULL 집어넣기 (마지막 표시) */
+	if_->rsp -= 8;
+	*((char **) if_->rsp) = NULL;
+
+	/* 문자열 주소 집어넣기 */
+	for (int i = argc-1; i >= 0; i--) {
+		// 스택에 먼저 공간을 만들고, 미리 만들어둔 배열값을 입력한다.
+		if_->rsp -= 8;
+		// if_->rsp는 정수이기 때문에 값을 바꾸려면 또 포인터로 타입 캐스팅을 해줘야한다.
+		// 이게 그 설명해준 이중포인터였나? 미친것처럼 헷갈리네...
+		// 포인터로 바꿔야한다 ㅇㅋ -> 그 뒤부터 머리 지진, 나중에 글로 정리해둘것...
+		*((char **) if_->rsp) = ad_arr[i];
+	}
+	
+	/* return address 삽입하기 */
+	if_->rsp -= 8;
+	*((char **) if_->rsp) = NULL;
+
 	success = true;
 
 done:
