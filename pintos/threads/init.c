@@ -250,7 +250,21 @@ run_task (char **argv) {
 	printf ("Execution of '%s' complete.\n", task);
 }
 
-/* ARGV[]에 지정된 모든 action을 null pointer sentinel까지 실행한다. */
+/* ARGV[]에 남아 있는 action들을 순서대로 실행한다.
+ *
+ * 여기로 들어오는 ARGV는 parse_options()가 -q, -f 같은 kernel option을
+ * 이미 처리한 뒤의 나머지 command line이다. 예를 들어 userprog 테스트의
+ * `run "args-single onearg"`는 대략 다음 모양으로 들어온다.
+ *
+ *   argv[0] = "run"
+ *   argv[1] = "args-single onearg"
+ *   argv[2] = NULL
+ *
+ * run_actions()는 argv[0]에 있는 action 이름을 actions[] 표에서 찾고,
+ * 그 action에 필요한 인자가 충분한지 확인한 뒤, 연결된 함수를 호출한다.
+ * action이 여러 개라면 처리한 action 묶음만큼 argv를 앞으로 옮겨 다음
+ * action을 계속 처리한다. action이 하나뿐이면 argv가 NULL sentinel을
+ * 가리키게 되어 while 루프가 끝난다. */
 static void
 run_actions (char **argv) {
 	/* action 하나. */
@@ -277,20 +291,30 @@ run_actions (char **argv) {
 		const struct action *a;
 		int i;
 
-		/* action 이름을 찾는다. */
+		/* 현재 argv[0]에 있는 action 이름을 지원 action 표에서 찾는다.
+		   예: argv[0]이 "run"이면 a->name이 "run"인 항목에서 멈춘다. */
 		for (a = actions; ; a++)
 			if (a->name == NULL)
 				PANIC ("unknown action `%s' (use -h for help)", *argv);
 			else if (!strcmp (*argv, a->name))
 				break;
 
-		/* 필요한 인자가 있는지 확인한다. */
+		/* 위 loop에서 찾은 action descriptor(a)를 기준으로,
+		   해당 action이 요구하는 argv 항목들이 모두 있는지 확인한다.
+		   a->argc는 action 이름까지 포함한 총 항목 수다.
+		   예: {"run", 2, run_task}는 argv[0]이 이미 "run"으로 확인됐고,
+		   추가로 argv[1]에 실행할 task 문자열이 있어야 한다는 뜻이다. */
 		for (i = 1; i < a->argc; i++)
 			if (argv[i] == NULL)
 				PANIC ("action `%s' requires %d argument(s)", *argv, a->argc - 1);
 
-		/* action을 호출하고 다음으로 진행한다. */
+		/* action을 호출한다. "run"이면 run_task(argv)가 실행되고,
+		   run_task는 argv[1]을 사용자 프로그램 command line으로 넘긴다. */
 		a->function (argv);
+
+		/* 방금 처리한 action과 그 인자들을 건너뛰고 다음 action으로 이동한다.
+		   테스트처럼 action이 하나뿐이면 NULL sentinel로 이동해 while이 끝난다.
+		   action이 여러 개라면 다음 반복에서 그 다음 action을 처리한다. */
 		argv += a->argc;
 	}
 
