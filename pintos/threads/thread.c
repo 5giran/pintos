@@ -305,7 +305,10 @@ tid_t thread_create(const char *name, int priority,
 	tid = t->tid = allocate_tid();
 
 	/* 스케줄되면 kernel_thread를 호출하도록 설정한다.
-	 * 참고로 rdi는 첫 번째 인자이고, rsi는 두 번째 인자다. */
+	 * 참고로 rdi는 첫 번째 인자이고, rsi는 두 번째 인자다. 
+	 * thread가 나중에 CPU를 받았을 때 kernel_thread(initd, fn_copy)로 시작하도록
+	 * 미래의 CPU 상태를 미리 세팅
+	*/
 	t->tf.rip = (uintptr_t)kernel_thread;
 	t->tf.R.rdi = (uint64_t)function;
 	t->tf.R.rsi = (uint64_t)aux;
