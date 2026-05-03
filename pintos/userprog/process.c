@@ -427,6 +427,10 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 	for (int i = argc-1; i >= 0; i--) {
 		// if_->rsp 문자열 넣을 주소 만큼 줄여주기
 		if_->rsp -= strlen(argv[i])+1;
+		// rsp가 현재 할당된 스택 한 페이지 범위를 벗어났는지 확인
+		if (if_->rsp < USER_STACK - PGSIZE) {
+			goto done;
+		}
 		// 문자열 스택에 삽입
 		// 첫번째 매개변수가 포인터를 가리키므로 포인터로 캐스팅 해놔야한다.
 		memcpy((char *) if_->rsp, argv[i], strlen(argv[i])+1);
@@ -441,12 +445,18 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 
 	/* 맨 끝에 NULL 집어넣기 (마지막 표시) */
 	if_->rsp -= 8;
+	if (if_->rsp < USER_STACK - PGSIZE) {
+			goto done;
+	}
 	*((char **) if_->rsp) = NULL;
 
 	/* 문자열 주소 집어넣기 */
 	for (int i = argc-1; i >= 0; i--) {
 		// 스택에 먼저 공간을 만들고, 미리 만들어둔 배열값을 입력한다.
 		if_->rsp -= 8;
+		if (if_->rsp < USER_STACK - PGSIZE) {
+			goto done;
+		}
 		// if_->rsp는 정수이기 때문에 값을 바꾸려면 또 포인터로 타입 캐스팅을 해줘야한다.
 		// 이게 그 설명해준 이중포인터였나? 미친것처럼 헷갈리네...
 		// 포인터로 바꿔야한다 ㅇㅋ -> 그 뒤부터 머리 지진, 나중에 글로 정리해둘것...
@@ -458,6 +468,9 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 
 	/* return address 삽입하기 */
 	if_->rsp -= 8;
+	if (if_->rsp < USER_STACK - PGSIZE) {
+			goto done;
+	}
 	*((char **) if_->rsp) = NULL;
 
 	/* 레지스터에 넘기기 */
