@@ -270,16 +270,22 @@ process_exec (void *f_name)
 /* TID 스레드가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.  커널에 의해 종료되었다면(즉, 예외로 인해 강제 종료되었다면)
  * -1을 반환합니다.  TID가 유효하지 않거나 호출한 프로세스의 자식이 아니거나, 해당 TID에 대해 process_wait()가 이미
  * 성공적으로 호출되었다면, 기다리지 않고 즉시 -1을 반환합니다.
- *
+ * 
  * 이 함수는 문제 2-2에서 구현됩니다.  현재는 아무 작업도 하지 않습니다. */
 int 
 process_wait (tid_t child_tid UNUSED)
 {
 	/* XXX: 힌트) pintos는 process_wait (initd)에서 종료합니다. process_wait를 구현하기 전에
 	 * XXX:       여기서 무한 루프를 추가하는 것을 권장합니다. */
-	while (1)
-		thread_yield ();
-	return -1;
+	/* 현재는 임시적으로 구현 */
+
+	int cnt = 0;
+
+	while (cnt < 1000000000) {
+		cnt++;
+	}
+
+	return 0;
 }
 
 /* 프로세스를 종료합니다. 이 함수는 thread_exit ()에서 호출됩니다. */
