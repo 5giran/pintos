@@ -23,7 +23,7 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool load (const char *file_name, struct intr_frame *if_, char *argv[], int argc);
 static void initd (void *f_name);
 static void __do_fork (void *);
 
@@ -420,7 +420,8 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
 
 	// 삽입한 문자열 주소 저장 배열
-	char *ad_arr[argc];
+	// char *ad_arr[argc]; 런타임으로 바뀌는건 뭔 문제가 있대서...
+	char *ad_arr[32];
 	// if_->rsp는 포인터가 아니라 정수이므로 
 
 	/* 입력된 문자열 자체 삽입 */
