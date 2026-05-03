@@ -424,7 +424,7 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 	// if_->rsp는 포인터가 아니라 정수이므로 
 
 	/* 입력된 문자열 자체 삽입 */
-	for (int i = 0; i < argc; i++) {
+	for (int i = argc-1; i >= 0; i--) {
 		// if_->rsp 문자열 넣을 주소 만큼 줄여주기
 		if_->rsp -= strlen(argv[i])+1;
 		// 문자열 스택에 삽입
@@ -452,10 +452,19 @@ load (const char *file_name, struct intr_frame *if_, char *argv[], int argc) {
 		// 포인터로 바꿔야한다 ㅇㅋ -> 그 뒤부터 머리 지진, 나중에 글로 정리해둘것...
 		*((char **) if_->rsp) = ad_arr[i];
 	}
-	
+
+	/* 레지스터 삽입용 첫번째 주소 argv 저장, return address 삽입 전 */
+	uint64_t rp = if_->rsp;
+
 	/* return address 삽입하기 */
 	if_->rsp -= 8;
 	*((char **) if_->rsp) = NULL;
+
+	/* 레지스터에 넘기기 */
+	if_->R.rdi = (uint64_t)argc;
+	// 기존 커널의 argv 배열이 아니라 유저 스택에서 수정한 argv 배열의 시작주소를 가리키도록 해야한다.
+	// fake return 하기 전 값이 그 시작 주소다 (거꾸로 써지니까)
+	if_->R.rsi = (uint64_t)rp;
 
 	success = true;
 
