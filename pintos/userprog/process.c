@@ -36,10 +36,20 @@ process_init (void)
 	struct thread *current = thread_current();
 }
 
-/* FILE_NAME에서 로드된 "initd"라는 첫 번째 userland 프로그램을 시작한다.
- * 새 스레드는 process_create_initd()가 반환하기 전에 스케줄될 수 있고(심지어 종료될 수도 있다).
- * initd의 thread id를 반환하며, 스레드를 생성할 수 없으면 TID_ERROR를 반환한다.
- * 이 함수는 반드시 한 번만 호출해야 한다. */
+/* FILE_NAME command line으로 첫 user process를 시작할 kernel thread를 만든다.
+ *
+ * run_task()는 "args-single onearg" 같은 전체 command line을 이 함수에
+ * 넘긴다. 이 함수가 사용자 코드를 직접 실행하는 것은 아니다. 대신 새
+ * kernel thread를 만들고, 그 thread가 initd(fn_copy)를 실행하게 한다.
+ *
+ * 새 thread는 initd() 안에서 process_exec() -> load() -> do_iret() 순서로
+ * 사용자 프로그램을 적재하고 user mode로 진입한다. 따라서 반환값 tid는
+ * "방금 만든 kernel thread이자 첫 user process"를 기다리기 위해
+ * process_wait()에 전달된다.
+ *
+ * 새 스레드는 process_create_initd()가 반환하기 전에 스케줄될 수 있고
+ * 심지어 종료될 수도 있다. 그래서 thread_create()에 넘길 command line은
+ * 호출자 stack이 아니라 별도 page(fn_copy)에 복사해 둔다. */
 tid_t 
 process_create_initd (const char *file_name)
 {
@@ -55,7 +65,8 @@ process_create_initd (const char *file_name)
 	if (fn_copy == NULL)
 		return TID_ERROR;
 
-	/* "args-single one two" 같은 전체 명령줄을 페이지에 복사한다. */
+	/* "args-single one two" 같은 전체 명령줄을 페이지에 복사한다.
+	   이 복사본은 새 thread의 initd()가 받아서 process_exec()에 넘긴다. */
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* 첫 공백 전까지 길이를 구한다.
@@ -72,9 +83,10 @@ process_create_initd (const char *file_name)
 	/* C 문자열 끝 표시 */
 	thread_name[name_len] = '\0';
 
-	/* 새 스레드를 만든다.
-	   스레드 이름은 실행 파일 이름만,
-	   실제 전달 데이터는 전체 명령줄 복사본 fn_copy다. */
+	/* 새 kernel thread를 만든다.
+	   스레드 이름은 실행 파일 이름만 사용하고, 실제 실행에 필요한
+	   데이터는 전체 명령줄 복사본 fn_copy를 aux로 넘긴다.
+	   새 thread가 시작되면 kernel_thread()를 거쳐 initd(fn_copy)를 호출한다. */
 	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
 
 	/* 스레드 생성 실패 시 아까 잡은 페이지를 반환한다. */

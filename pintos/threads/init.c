@@ -232,16 +232,37 @@ parse_options (char **argv) {
 	return argv;
 }
 
-/* ARGV[1]에 지정된 작업을 실행한다. */
+/* ARGV[1]에 지정된 작업을 실행한다.
+ *
+ * run_actions()가 "run" action을 찾으면 이 함수를 호출한다.
+ * 이때 argv는 보통 다음 모양이다.
+ *
+ *   argv[0] = "run"
+ *   argv[1] = "args-single onearg"
+ *   argv[2] = NULL
+ *
+ * argv[1]은 실행 파일 이름만이 아니라 사용자 프로그램에 넘길 인자까지
+ * 포함한 command line 전체다. userprog 빌드에서는 이 문자열을
+ * process_create_initd()에 넘겨 첫 사용자 프로세스를 만들고,
+ * process_wait()로 그 프로세스가 끝날 때까지 기다린다. */
 static void
 run_task (char **argv) {
+	/* task = 사용자 프로그램 이름 + 인자.
+	   예: "args-single onearg" */
 	const char *task = argv[1];
 
 	printf ("Executing '%s':\n", task);
 #ifdef USERPROG
+	/* thread_tests는 Project 1 thread 테스트를 userprog 빌드에서도
+	   돌릴 때 쓰는 플래그다. */
 	if (thread_tests){
 		run_test (task);
 	} else {
+		/* 일반적인 Project 2 사용자 프로그램 테스트에서는 이 경로로 온다.
+		   process_create_initd()는 task를 실행할 새 kernel thread를 만들고
+		   그 tid를 반환한다. process_wait()는 그 child thread(새 kernel thread이자 user mode로 내려가는 thread)가 종료될 때까지
+		   현재 action thread(parent)를 대기시킨다. 이 대기가 있어야 사용자
+		   프로그램이 끝난 뒤 아래의 "Execution ... complete."까지 진행한다. */
 		process_wait (process_create_initd (task));
 	}
 #else
