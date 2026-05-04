@@ -13,70 +13,16 @@
 #include "threads/vaddr.h"     // is_user_vaddr
 #include "threads/mmu.h"
 #include "intrinsic.h"
+#include "devices/input.h"
+#include "filesys/filesys.h"
+#include "filesys/file.h"
+#include "threads/synch.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 static void exit_with_status (int status);
 static void check_address (const void *addr);
 
-bool
-validate_user_read(const void *buffer, size_t size)
-{
-    if (size == 0) return true;
-    if (buffer == NULL) return false; // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
-
-	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
-    const uint8_t *bf =(const uint8_t *)buffer;
-	// end address 따로 정의: buffer의 끝 바이트 주소
-	const uint8_t *end_adr = bf+size-1;
-
-	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
-	if (end_adr < bf) return false; // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
-
-	// 순회할 시작페이지, 끝 페이지 정의
-	const uint8_t *start_page = pg_round_down(bf);
-	const uint8_t *end_page = pg_round_down(end_adr);
-
-    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
-    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
-    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
-		// page 시작주소가 user virtual address 범위 안에 있지 않다면 false
-		if (!is_user_vaddr(i)) return false;
-		// page가 실제 mapped 되어있지 않다면 false
-		// pml4_get_page 함수 인수 확인
-		if (!pml4_get_page(thread_current()->pml4, i)) return false;
-    }
-
-	// 여기까지 왔다는건 성공했다는 것
-	return true;
-}
-
-bool
-validate_user_write(const void *buffer, size_t size)
-{
-
-}
-
-
-
-void
-copy_in (void *dst, const void *usrc, size_t size)
-{
-	/* TODO: user memory -> kernel memory */
-}
-
-void
-copy_out (void *udst, const void *src, size_t size)
-{
-	/* TODO: kernel memory -> user memory */
-}
-
-char *
-copy_in_string (const char *ustr)
-{
-	/* TODO: user string을 kernel buffer로 복사 */
-	return NULL;
-}
 
 /* 시스템 콜.
  *
@@ -127,6 +73,51 @@ syscall_handler (struct intr_frame *f UNUSED)
 		case SYS_EXIT:
 			exit_with_status ((int) f->R.rdi);
 			break;
+		
+		/* 현재 파일 열기 */
+		case SYS_OPEN: {
+			/* 유저 프로그램이 넘긴 첫 번째 인자(file 이름 주소)는 rdi에 들어 있다. */
+			const char *user_file = (const char *) f->R.rdi;
+
+			/* 유저 주소의 문자열을 커널이 안전하게 쓸 수 있는 커널 문자열로 복사한다. */
+			char *file_name = copy_in_string (user_file);
+
+			/* 파일 시스템 내부 자료구조 보호를 위해 filesys_lock을 잡는다. */
+			// lock_acquire (&filesys_lock);
+
+			/* 복사된 커널 문자열을 이용해 실제 파일을 연다. */
+			struct file *opened_file = filesys_open (file_name);
+
+			/* filesys_open() 호출이 끝났으므로 filesys_lock을 푼다. */
+			// lock_release (&filesys_lock);
+
+			/* 파일 열기에 실패한 경우 open()의 반환값은 -1이다. */
+			if (opened_file == NULL) {
+				f->R.rax = -1;
+			} else {
+				/* 열린 파일 객체를 현재 프로세스의 fd table에 등록하고 fd 번호를 받는다. */
+				int fd = fd_alloc (opened_file);
+
+				/* fd table이 가득 찼거나 등록에 실패한 경우 fd_alloc()은 -1을 반환한다. */
+				if (fd < 0) {
+					/* fd 등록 실패 시 방금 연 파일 객체를 닫아서 자원 누수를 막는다. */
+					// lock_acquire (&filesys_lock);
+					file_close (opened_file);
+					// lock_release (&filesys_lock);
+				}
+
+				/* 성공하면 2 이상의 fd, 실패하면 -1을 유저 프로그램에 반환한다. */
+				f->R.rax = fd;
+			}
+
+			/* copy_in_string()이 할당한 커널 문자열 버퍼를 해제한다. */
+			palloc_free_page (file_name);
+
+			/* SYS_OPEN 처리를 끝내고 switch 문을 빠져나간다. */
+			break;
+		}
+
+
 
 		/* write(fd, buffer, size) */
 		case SYS_WRITE: {
@@ -139,13 +130,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 			/* 세 번째 인자 size는 rdx */
 			unsigned size = (unsigned) f->R.rdx;
 
-			/* size > 0 이면 시작 주소 검증 */
-			if (size > 0) {
-				check_address (buffer);
-
-				/* 버퍼의 마지막 바이트 주소도 검증 */
-				check_address ((const uint8_t *) buffer + size - 1);
-			}
+			/* 시작 주소 검증 */
+			if (!validate_user_read(buffer, size)) exit_with_status(-1);
 
 			/* fd == 1 은 stdout */
 			if (fd == 1) {
@@ -156,6 +142,40 @@ syscall_handler (struct intr_frame *f UNUSED)
 				f->R.rax = size;
 			} else {
 				/* 지금은 stdout만 지원 */
+				f->R.rax = -1;
+			}
+			break;
+		}
+
+		/* read(fd, buffer, size) */
+		case SYS_READ: {
+			/* 첫 번째 인자 fd는 rdi */
+			int fd = (int) f->R.rdi;
+
+			/* 두 번째 인자 buffer는 rsi */
+			// user buffer에서 써야해서 수정가능해야함
+			void *buffer = (void *) f->R.rsi;
+
+			/* 세 번째 인자 size는 rdx */
+			unsigned size = (unsigned) f->R.rdx;
+
+			/* 시작 주소 검증 */
+			if (!validate_user_write(buffer, size)) exit_with_status(-1);
+
+			/* fd == 0 은 stdin */
+			if (fd == 0) {
+				/* buffer를 1바이트씩 쓸 수 있는 포인터로 */
+				uint8_t *bf = (uint8_t *) buffer;
+
+				/* stdin에서 한 글자씩 읽어서 user buffer에 채움 */
+				for (size_t i = 0; i < size; i++) {
+					bf[i] = input_getc ();
+				}
+
+				/* 반환값 = 실제 읽은 바이트 수 */
+				f->R.rax = size;
+			} else {
+				/* 지금은 stdin만 지원 */
 				f->R.rax = -1;
 			}
 			break;
@@ -184,4 +204,91 @@ check_address (const void *addr)
 	/* NULL 이거나 유저 가상주소 범위 밖이면 비정상 종료 */
 	if (addr == NULL || !is_user_vaddr (addr))
 		exit_with_status (-1);
+}
+
+
+
+bool
+validate_user_read(const void *buffer, size_t size)
+{
+    if (size == 0) return true;
+    if (buffer == NULL) return false; // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
+
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf =(const uint8_t *)buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) return false; // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down(bf);
+	const uint8_t *end_page = pg_round_down(end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 false
+		if (!is_user_vaddr(i)) return false;
+		// page가 실제 mapped 되어있지 않다면 false
+		// pml4_get_page 함수 인수 확인
+		if (!pml4_get_page(thread_current()->pml4, i)) return false;
+    }
+
+	// 여기까지 왔다는건 성공했다는 것
+	return true;
+}
+
+bool
+validate_user_write(const void *buffer, size_t size)
+{
+	if (size == 0) return true;
+    if (buffer == NULL) return false; // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
+
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf =(const uint8_t *)buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) return false; // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down(bf);
+	const uint8_t *end_page = pg_round_down(end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 false
+		if (!is_user_vaddr(i)) return false;
+		// page가 실제 mapped 되어있지 않다면 false
+		// pml4_get_page 함수 인수 확인
+		if (!pml4_get_page(thread_current()->pml4, i)) return false;
+    }
+
+	// 여기까지 왔다는건 성공했다는 것
+	return true;
+}
+
+
+
+void
+copy_in (void *dst, const void *usrc, size_t size)
+{
+	/* TODO: user memory -> kernel memory */
+}
+
+void
+copy_out (void *udst, const void *src, size_t size)
+{
+	/* TODO: kernel memory -> user memory */
+}
+
+char *
+copy_in_string (const char *ustr)
+{
+	/* TODO: user string을 kernel buffer로 복사 */
+	return NULL;
 }

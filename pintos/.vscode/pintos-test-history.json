@@ -1,38 +1,98 @@
 {
   "userprog": {
     "tests/userprog/args-none": {
-      "count": 1,
-      "last_used": 1777815385.236,
+      "count": 4,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/args-single": {
-      "count": 1,
-      "last_used": 1777815393.767,
+      "count": 3,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/args-multiple": {
-      "count": 1,
-      "last_used": 1777815400.55,
+      "count": 3,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/args-many": {
-      "count": 1,
-      "last_used": 1777815407.623,
+      "count": 3,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/args-dbl-space": {
-      "count": 1,
-      "last_used": 1777815414.043,
+      "count": 3,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/exit": {
-      "count": 1,
-      "last_used": 1777815474.251,
+      "count": 2,
+      "last_used": 1777916732.626,
       "last_action": "run"
     },
     "tests/userprog/halt": {
+      "count": 2,
+      "last_used": 1777916732.626,
+      "last_action": "run"
+    },
+    "tests/userprog/write-normal": {
       "count": 1,
-      "last_used": 1777815482.046,
+      "last_used": 1777916579.371,
+      "last_action": "run"
+    },
+    "tests/userprog/write-boundary": {
+      "count": 5,
+      "last_used": 1777919024.587,
+      "last_action": "run"
+    },
+    "tests/userprog/write-bad-ptr": {
+      "count": 3,
+      "last_used": 1777916732.626,
+      "last_action": "run"
+    },
+    "tests/userprog/write-zero": {
+      "count": 3,
+      "last_used": 1777916732.626,
+      "last_action": "run"
+    },
+    "tests/userprog/write-stdin": {
+      "count": 3,
+      "last_used": 1777916732.626,
+      "last_action": "run"
+    },
+    "tests/userprog/write-bad-fd": {
+      "count": 3,
+      "last_used": 1777916732.626,
+      "last_action": "run"
+    },
+    "tests/userprog/read-normal": {
+      "count": 5,
+      "last_used": 1777919092.159,
+      "last_action": "run"
+    },
+    "tests/userprog/read-bad-ptr": {
+      "count": 1,
+      "last_used": 1777916641.13,
+      "last_action": "run"
+    },
+    "tests/userprog/read-boundary": {
+      "count": 5,
+      "last_used": 1777919108.62,
+      "last_action": "run"
+    },
+    "tests/userprog/read-zero": {
+      "count": 4,
+      "last_used": 1777919133.602,
+      "last_action": "run"
+    },
+    "tests/userprog/read-stdout": {
+      "count": 1,
+      "last_used": 1777916664.305,
+      "last_action": "run"
+    },
+    "tests/userprog/read-bad-fd": {
+      "count": 1,
+      "last_used": 1777916670.859,
       "last_action": "run"
     }
   }
