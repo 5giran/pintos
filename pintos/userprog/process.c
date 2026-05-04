@@ -235,10 +235,6 @@ process_exec (void *f_name)
 	/* 0부터 시작했으니 배열의 argc 번째 요소는 NULL */
 	argv_tokens[argc] = NULL;
 
-	char *p; // strtok_r 북마크용 포인터 변수
-	char *argv[32]; // 문자열 여러개의 시작 주소를 담는 변수
-	int argc = 0; // 인자 개수, 이게 포인터 배열이 되면 해당 정수의 주소를 담음
-
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
 	 * 그 이유는 현재 스레드가 다시 스케줄될 때
 	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. (복구할 실행 상태 저장, 스케줄링 재개용)
@@ -248,17 +244,6 @@ process_exec (void *f_name)
 	_if.ds = _if.es = _if.ss = SEL_UDSEG; // user data segment 사용
 	_if.cs = SEL_UCSEG; // user code segment 사용
 	_if.eflags = FLAG_IF | FLAG_MBS; // 인터럽트 허용 + 반드시 켜져 있어야 하는 기본 비트 설정
-
-
-	/* 문자열 공백 기준으로 파싱해서 저장하기 */
-	// 1. 첫번째 토큰 저장
-	char *token = strtok_r(f_name, " ", &p);
-	// 2. 이번에 추출한 토큰이 NULL이 아닐 경우 반복
-	while (token != NULL) {
-		argv[argc] = token; // argv 배열에 추출한 토큰 저장
-		argc++; // argc 카운트 
-		token = strtok_r(NULL, " ", &p); // 다음 토큰 추출, 두번째 토큰부터는 NULL
-	}	
 
 
 	/* 먼저 현재 컨텍스트를 종료합니다 */
@@ -613,67 +598,6 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	if_->R.rdi = (uint64_t) argc;
 	if_->rsp = (uint64_t) rsp;
 	if_->R.rsi = (uint64_t) argv_addr;
-
-	// 삽입한 문자열 주소 저장 배열
-	// char *ad_arr[argc]; 런타임으로 바뀌는건 뭔 문제가 있대서...
-	char *ad_arr[32];
-	// if_->rsp는 포인터가 아니라 정수이므로 
-
-	/* 입력된 문자열 자체 삽입 */
-	for (int i = argc-1; i >= 0; i--) {
-		// if_->rsp 문자열 넣을 주소 만큼 줄여주기
-		if_->rsp -= strlen(argv[i])+1;
-		// rsp가 현재 할당된 스택 한 페이지 범위를 벗어났는지 확인
-		if (if_->rsp < USER_STACK - PGSIZE) {
-			goto done;
-		}
-		// 문자열 스택에 삽입
-		// 첫번째 매개변수가 포인터를 가리키므로 포인터로 캐스팅 해놔야한다.
-		memcpy((char *) if_->rsp, argv[i], strlen(argv[i])+1);
-		// 스택에 삽입한 문자열 주소 배열에 따로 기록
-		// if_->rsp가 삽입한 문자열 주소 배열이 되는건 맞는데 포인터여야 하니까 타입 캐스팅
-		ad_arr[i] = (char *) if_->rsp;
-	}
-
-	/* 8의 배수 맞춰서 주소 패딩 넣기 */
-	// rsp는 정수기때문에 이렇게 주소 정수값만 수정해줘도 된다. 따로 패딩 넣는 과정이 필요 없다.
-	if_->rsp = if_->rsp - (if_->rsp % 8);
-
-	/* 맨 끝에 NULL 집어넣기 (마지막 표시) */
-	if_->rsp -= 8;
-	if (if_->rsp < USER_STACK - PGSIZE) {
-			goto done;
-	}
-	*((char **) if_->rsp) = NULL;
-
-	/* 문자열 주소 집어넣기 */
-	for (int i = argc-1; i >= 0; i--) {
-		// 스택에 먼저 공간을 만들고, 미리 만들어둔 배열값을 입력한다.
-		if_->rsp -= 8;
-		if (if_->rsp < USER_STACK - PGSIZE) {
-			goto done;
-		}
-		// if_->rsp는 정수이기 때문에 값을 바꾸려면 또 포인터로 타입 캐스팅을 해줘야한다.
-		// 이게 그 설명해준 이중포인터였나? 미친것처럼 헷갈리네...
-		// 포인터로 바꿔야한다 ㅇㅋ -> 그 뒤부터 머리 지진, 나중에 글로 정리해둘것...
-		*((char **) if_->rsp) = ad_arr[i];
-	}
-
-	/* 레지스터 삽입용 첫번째 주소 argv 저장, return address 삽입 전 */
-	uint64_t rp = if_->rsp;
-
-	/* return address 삽입하기 */
-	if_->rsp -= 8;
-	if (if_->rsp < USER_STACK - PGSIZE) {
-			goto done;
-	}
-	*((char **) if_->rsp) = NULL;
-
-	/* 레지스터에 넘기기 */
-	if_->R.rdi = (uint64_t)argc;
-	// 기존 커널의 argv 배열이 아니라 유저 스택에서 수정한 argv 배열의 시작주소를 가리키도록 해야한다.
-	// fake return 하기 전 값이 그 시작 주소다 (거꾸로 써지니까)
-	if_->R.rsi = (uint64_t)rp;
 
 	success = true;
 
