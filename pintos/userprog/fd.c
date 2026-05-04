@@ -26,7 +26,7 @@ fd_alloc (struct file *file)
 {
     struct thread *cur = thread_current ();
     int fd = find_empty_fd (cur);
-    if (fd == 1)
+    if (fd == -1)
         return -1;
     
     cur->fd_table[fd] = file;
@@ -34,4 +34,13 @@ fd_alloc (struct file *file)
     if (cur->next_fd >= FD_MAX)
         cur->next_fd = 2;
     return fd;
+}
+
+struct file *
+fd_get (int fd)
+{
+    struct thread *cur = thread_current ();
+    if (fd < 2 || fd >= FD_MAX)
+        return NULL;
+    return cur->fd_table[fd];
 }
