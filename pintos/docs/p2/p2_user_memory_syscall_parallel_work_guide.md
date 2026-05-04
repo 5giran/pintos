@@ -7,10 +7,10 @@
 전제는 다음과 같다.
 
 - `argument-passing`은 이미 구현되어 있다.
-- `process_wait()`은 이미 구현되어 있다고 가정한다.
+- `process_wait()`은 현재 임시 구현 상태이므로, 이번 분업에서 정식 구현까지 포함한다.
 - Extra인 `dup2`는 이번 범위에서 제외한다.
 - 목표는 기본 `tests/userprog`, `tests/userprog/no-vm`, `tests/filesys/base` 테스트 통과다.
-- 현재 브랜치에서 `process_wait()`이 미완이면, 3번 담당 작업 전에 wait 구현 브랜치와 먼저 합쳐야 한다.
+- 기존 분업 구조는 유지하되, `process_wait()` 정식 구현은 3번 담당의 process lifecycle 범위에 추가한다.
 
 핵심 원칙은 한 파일에 세 명이 동시에 달라붙지 않는 것이다. `syscall.c`, `process.c`, `thread.h`는 충돌이 쉬우므로 소유자를 정하고, 나머지는 독립 파일로 분리한다.
 
@@ -22,7 +22,7 @@
 
 - 공통 안전 레이어: 모든 syscall이 사용하는 user pointer 검증과 복사
 - 반복형 파일 기능: fd table과 파일 syscall
-- 통합형 프로세스 기능: syscall dispatcher, fork, exec, exit, rox
+- 통합형 프로세스 기능: syscall dispatcher, fork, exec, wait, exit, rox
 
 이렇게 나누면 1번과 2번은 거의 독립적으로 진행할 수 있고, 3번도 공통 API 이름만 먼저 고정하면 초반부터 병렬로 작업할 수 있다. 완전한 100% 병렬은 불가능하지만, 약 70~80%는 병렬 진행이 가능하다.
 
@@ -33,7 +33,7 @@
 1. 30분 공동 설계로 공통 인터페이스를 확정한다.
 2. 1번 담당자는 사용자 메모리 접근 레이어를 구현한다.
 3. 2번 담당자는 FD 테이블과 파일 syscall 구현을 진행한다.
-4. 3번 담당자는 syscall dispatcher, fork, exec, exit, rox를 진행한다.
+4. 3번 담당자는 syscall dispatcher, fork, exec, wait, exit, rox를 진행한다.
 5. 마지막에 셋이 함께 통합한다.
 
 ### 병렬 불가능한 공동 결정과 이유
@@ -47,8 +47,11 @@
 - invalid pointer 처리 방식
 - invalid fd 처리 방식
 - `filesys_lock` 사용 규칙
+- child status record 구조와 wait/exit 상태 저장 정책
 
 이 부분은 병렬로 나누면 안 된다. 세 파트가 모두 같은 함수와 필드 이름을 호출하기 때문이다. 여기서 이름이 다르면 나중에 빌드 충돌이 크게 나고, 각 담당자가 만든 코드가 서로 맞물리지 않는다.
+
+특히 wait 관련 자료구조는 `fork`, `exit`, `process_wait()`가 같은 record를 공유한다. 따라서 wait만 별도 담당으로 빼지 않는다. 별도 담당으로 나누면 parent-child 관계 저장, exit status 저장, semaphore wakeup, record 해제 정책이 서로 어긋나기 쉽다.
 
 ## 3. 공통 인터페이스 계약
 
@@ -105,7 +108,7 @@ bool fd_duplicate_all (struct thread *dst, struct thread *src);
 
 ### 3.3 `struct thread` 추가 필드
 
-필드 추가는 한 명이 한 번에 처리한다. 추천 소유자는 2번 담당자다.
+FD 관련 필드는 2번 담당자가 추가한다.
 
 ```c
 #ifdef USERPROG
@@ -116,6 +119,16 @@ bool fd_duplicate_all (struct thread *dst, struct thread *src);
 ```
 
 `running_file`은 실행 중인 executable의 쓰기를 막기 위해 사용한다.
+
+wait/process lifecycle 관련 필드는 3번 담당자가 추가한다. 같은 `thread.h`를 만지므로, 실제 작업 전에는 2번 담당자와 필드 위치를 맞춘다.
+
+필요한 개념은 다음과 같다.
+
+- 현재 프로세스가 만든 direct child 목록
+- 현재 프로세스가 부모에게 보고할 child status record 포인터
+- 현재 프로세스의 exit status
+
+child status record는 child가 종료된 뒤에도 parent가 `wait()`로 status를 회수할 때까지 살아 있어야 한다. 따라서 `struct thread` 안에만 저장하면 안 되고, 부모/자식 수명보다 오래 버틸 수 있는 별도 동적 구조체로 관리한다.
 
 ## 4. 1번 담당: User Memory / Pointer Safety
 
@@ -351,11 +364,11 @@ tests/filesys/base/syn-write
 tests/filesys/base/syn-remove
 ```
 
-## 6. 3번 담당: Dispatcher / Fork / Exec / Exit / Rox
+## 6. 3번 담당: Dispatcher / Fork / Exec / Wait / Exit / Rox
 
 ### 책임
 
-syscall dispatcher와 process lifecycle 관련 syscall을 구현한다.
+syscall dispatcher와 process lifecycle 관련 syscall을 구현한다. 기존 분업은 유지하되, 현재 임시 구현 상태인 `process_wait()`의 정식 구현까지 이 담당 범위에 포함한다.
 
 주 소유 파일은 다음과 같다.
 
@@ -375,6 +388,13 @@ wait
 
 파일 syscall은 2번 담당 함수로 위임한다. 3번 담당자가 dispatcher의 최종 소유자다.
 
+`wait`를 3번 담당에 포함하는 이유는 다음과 같다.
+
+- `fork`가 child status record를 생성해야 한다.
+- `exit`가 같은 record에 exit status를 기록해야 한다.
+- `process_wait()`가 같은 record를 찾아 block/unblock과 해제를 처리해야 한다.
+- 세 기능이 모두 `process.c`, `thread.h`, parent-child lifecycle을 공유하므로 따로 나누면 병렬성보다 충돌 비용이 더 크다.
+
 ### Dispatcher 규칙
 
 - syscall 번호는 `f->R.rax`에 있다.
@@ -388,17 +408,21 @@ wait
 - user process일 때만 `"%s: exit(%d)\n"` 형식으로 출력한다.
 - 열린 fd를 `fd_close_all()`로 정리한다.
 - `running_file`을 닫아 executable deny-write를 해제한다.
-- child/wait 관련 자원은 이미 구현된 `process_wait()` 설계와 맞춘다.
+- 현재 프로세스의 child status record에 exit status와 종료 여부를 기록한다.
+- parent가 기다릴 수 있도록 child status record의 semaphore를 `up`한다.
+- parent가 먼저 죽은 경우에도 child status record가 안전하게 해제되도록 reference count 또는 동등한 orphan 처리 정책을 사용한다.
 - `thread_exit()`로 종료한다.
 - exit message가 중복 출력되지 않게 출력 위치를 하나로 고정한다.
 
 ### `fork(thread_name)`
 
 - `thread_name`은 `copy_in_string()`으로 kernel에 복사한다.
+- child status record를 생성하고 parent의 direct child 목록에 등록한다.
 - parent `intr_frame`을 child에게 안전하게 전달한다.
 - child는 parent register를 복사하되 `RAX = 0`으로 설정한다.
 - parent는 child가 page table과 fd table 복제에 성공했는지 확인한 뒤 반환한다.
 - child 복제 실패 시 parent의 fork는 `TID_ERROR` 또는 `-1`을 반환한다.
+- child 생성 또는 resource 복제 실패 시 생성한 child status record도 정리한다.
 
 ### `duplicate_pte()`
 
@@ -419,8 +443,14 @@ wait
 
 ### `wait(pid)`
 
-- 이미 구현된 `process_wait(pid)`에 연결한다.
-- wait 미완 브랜치라면 이 작업은 별도 선행 이슈로 분리한다.
+- 임시 busy-wait/count loop 구현을 정식 `process_wait(pid)`로 교체한다.
+- `pid`가 현재 프로세스의 direct child가 아니면 즉시 `-1`을 반환한다.
+- 같은 child에 이미 wait한 적이 있으면 즉시 `-1`을 반환한다.
+- child가 아직 살아 있으면 child status record의 semaphore에서 block한다.
+- child가 이미 종료되어 있으면 block하지 않고 저장된 exit status를 반환한다.
+- child가 exception, invalid pointer, load failure 등으로 정상 `exit()` 없이 죽은 경우 `-1`을 반환한다.
+- wait 성공 후 child status record를 parent child list에서 제거하고 parent 쪽 reference를 해제한다.
+- parent가 wait하지 않고 종료해도 child status record가 dangling pointer로 남지 않게 정리한다.
 
 ### `rox`
 
@@ -434,6 +464,8 @@ fork는 단순히 thread를 하나 만드는 syscall이 아니다. child는 pare
 
 exec는 현재 프로세스를 새 프로그램으로 바꾸는 작업이다. 성공하면 반환하지 않고, 실패하면 현재 프로세스가 `exit(-1)`로 종료되어야 한다. exec 후에도 기존 fd table은 유지되어야 한다.
 
+wait는 단순 delay가 아니다. parent가 만든 direct child의 종료 상태를 정확히 한 번 회수하는 기능이다. child가 parent보다 먼저 죽을 수도 있고, parent가 child보다 먼저 죽을 수도 있으며, parent가 wait하지 않을 수도 있다. 따라서 child status record는 parent와 child의 수명 차이를 견딜 수 있게 설계해야 한다.
+
 rox는 실행 중인 executable 파일에 대한 write를 막는 기능이다. `file_deny_write()`만 호출하고 파일을 바로 닫으면 deny가 풀리므로, process가 살아 있는 동안 파일을 계속 열어 두어야 한다.
 
 ### 위험 요소와 주의점
@@ -441,6 +473,9 @@ rox는 실행 중인 executable 파일에 대한 write를 막는 기능이다. `
 - `process_fork()`에서 parent `intr_frame`을 제대로 넘기지 않으면 child context가 깨진다.
 - child `RAX = 0`을 빼먹으면 parent/child 분기가 모두 틀어진다.
 - parent가 child 복제 성공 전에 fork에서 반환하면 fork 실패를 감지하지 못한다.
+- wait를 busy loop로 처리하면 CPU를 낭비하고, child exit status를 정확히 전달하지 못하며, `wait-twice`, `wait-killed`, `multi-oom`에서 깨진다.
+- child status record를 `struct thread` 내부 주소에만 의존하면 child thread가 파괴된 뒤 parent가 dangling pointer를 볼 수 있다.
+- parent exit 시 child list를 정리하지 않으면 orphan child가 종료할 때 이미 죽은 parent 구조를 건드릴 수 있다.
 - exec 실패 후 이미 address space를 cleanup했다면 복구하지 말고 `exit(-1)`로 종료하는 정책을 따른다.
 - running executable file을 load 성공 직후 닫으면 deny-write가 풀려 rox가 실패한다.
 - `multi-oom`은 resource leak을 잡는다. 비정상 종료에서도 fd, running file, child 상태가 정리되어야 한다.
@@ -478,6 +513,16 @@ resource leak 테스트는 다음과 같다.
 
 ```text
 tests/userprog/no-vm/multi-oom
+```
+
+wait 구현 확인 순서는 다음을 추천한다.
+
+```text
+wait-simple      # 정상 child exit status 회수
+wait-twice       # 같은 child에 대한 두 번째 wait는 -1
+wait-bad-pid     # direct child가 아닌 pid는 -1
+wait-killed      # 비정상 종료 child는 -1
+multi-oom        # 반복 fork/exit에서 child status와 fd 누수 없음
 ```
 
 ## 7. 통합 순서
@@ -530,12 +575,13 @@ make tests/userprog/write-boundary.result
 make tests/userprog/bad-read.result
 ```
 
-### 7.4 4차 통합: fork/exec/rox
+### 7.4 4차 통합: fork/exec/wait/rox
 
 목표:
 
 - fork/exec/wait 연결
 - FD 복제
+- process_wait 정식 구현
 - rox deny-write
 
 우선 실행:
@@ -546,6 +592,9 @@ make tests/userprog/fork-read.result
 make tests/userprog/exec-once.result
 make tests/userprog/exec-read.result
 make tests/userprog/wait-simple.result
+make tests/userprog/wait-twice.result
+make tests/userprog/wait-bad-pid.result
+make tests/userprog/wait-killed.result
 make tests/userprog/rox-simple.result
 ```
 
@@ -572,7 +621,7 @@ tests/filesys/base/Rubric
 - 1번 담당자는 `syscall.c`를 크게 수정하지 않는다.
 - 2번 담당자는 dispatcher를 직접 완성하지 않고 파일 syscall 함수만 제공한다.
 - 3번 담당자는 `syscall.c` dispatcher의 최종 소유자다.
-- `thread.h` 필드 추가는 한 번만 한다. 추천은 2번 담당자가 추가하고 1번/3번은 그 필드를 사용만 한다.
+- `thread.h`는 2번과 3번이 모두 만질 수 있으므로 시작 전에 필드 위치를 합의한다. 2번은 FD 필드, 3번은 process lifecycle/wait 필드만 추가한다.
 - `process.c`는 3번 담당자가 소유한다. 2번 담당자는 필요한 fd helper만 제공한다.
 - lock 이름은 하나만 쓴다. 예: `filesys_lock`.
 - invalid pointer에서 종료되는 경로는 하나로 모은다. 여러 곳에서 직접 `printf` 후 `thread_exit()`하지 않는다.
@@ -587,6 +636,10 @@ tests/filesys/base/Rubric
 - `open()`은 fd `2` 이상만 반환한다.
 - fork child는 `RAX = 0`이다.
 - fork parent는 child 복제 성공을 기다린다.
+- `process_wait()`은 direct child만 기다리고, 같은 child에 대한 두 번째 wait는 `-1`을 반환한다.
+- child가 이미 죽었어도 parent는 저장된 exit status를 회수할 수 있다.
+- 비정상 종료 child의 wait 결과는 `-1`이다.
+- parent가 wait하지 않고 종료해도 child status record가 안전하게 정리된다.
 - exec 성공 시 반환하지 않는다.
 - exec 실패 시 현재 프로세스가 `exit(-1)`로 종료된다.
 - exec 후에도 fd table은 유지된다.
