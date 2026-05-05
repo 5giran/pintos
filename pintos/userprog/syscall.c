@@ -8,6 +8,7 @@
 #include "threads/flags.h"
 #include "threads/init.h"      // power_off 선언 있음
 #include "threads/vaddr.h"     // is_user_vaddr
+#include "./process.h"
 #include "intrinsic.h"
 
 void syscall_entry (void);
@@ -97,6 +98,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 				f->R.rax = -1;
 			}
 			break;
+		}
+		/* exec (const char *cmd_line) */
+		case SYS_EXEC: {
+			
+			/* 첫 번째 인자 file은 rdi */
+			char *user_file = (char *) f->R.rdi; // exec("echo hello") 라는 system call을 user process가 호출했다면, f->R.rdi 는 "echo hello" 문자열이 있는 user memory 주소
+
+			/* cmd_line 문자열을 kernel page에 복사, 내부적으로 주소 검증도 진행.. 하는지는 확인 필요 */
+			char *kernel_page = copy_in_string (user_file);
+
+			/* 복사 성공하면 */
+			if (process_exec (kernel_page) == -1) {
+				thread_exit ();
+			}
+			
 		}
 
 		/* 아직 구현 안 한 syscall은 비정상 종료 */
