@@ -1,6 +1,7 @@
 #include "threads/thread.h"
 #include "userprog/fd.h"
 #include "filesys/file.h"
+#include "userprog/syscall.h"
 
 void
 fd_init (struct thread *t)

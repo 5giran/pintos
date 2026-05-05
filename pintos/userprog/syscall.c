@@ -73,7 +73,7 @@ syscall_init (void)
 /* 시스템콜 인자들이 syscall_handler에 일반 함수 인자처럼 들어오는 게 아니라, 
  * f 안에 저장된 레지스터 값으로 들어온다. */
 void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
@@ -86,7 +86,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		/* 현재 프로세스 종료 */
 		case SYS_EXIT:
-			process ((int) f->R.rdi);
+			exit_with_status ((int) f->R.rdi);
 			break;
 
 		case SYS_CREATE:
@@ -113,7 +113,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 
 		case SYS_WRITE:
-			f->R.rax = sys_read ((int) f->R.rdi, 
+			f->R.rax = sys_write ((int) f->R.rdi, 
 								 (const void *) f->R.rsi,
 								 (unsigned) f->R.rdx);
 			break;
@@ -208,6 +208,7 @@ sys_open (const char *ufile)
 		file_close (file);
 		lock_release (&filesys_lock);
 	}
+	return fd;
 }
 
 static int 
@@ -325,6 +326,11 @@ sys_write (int fd, const void *ubuf, unsigned size)
 		}
 
 		if (written <= 0) {
+			break;
+		}
+
+		total += written;
+		if ((unsigned) written < chunk) {
 			break;
 		}
 	}
