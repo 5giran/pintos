@@ -1,5 +1,6 @@
 #include "threads/thread.h"
 #include "userprog/fd.h"
+#include "filesys/file.h"
 
 void
 fd_init (struct thread *t)
@@ -13,7 +14,7 @@ fd_init (struct thread *t)
 static int
 find_empty_fd (struct thread *t)
 {
-    for (int i = 0; i < FD_MAX - 2; i--) {
+    for (int i = 0; i < FD_MAX - 2; i++) {
         int fd = 2 + ((t->next_fd - 2 + i) % (FD_MAX - 2));
         if (t->fd_table[fd] == NULL)                        // 해당 슬롯이 비어 있다면
 			return fd;     
@@ -43,4 +44,64 @@ fd_get (int fd)
     if (fd < 2 || fd >= FD_MAX)
         return NULL;
     return cur->fd_table[fd];
+}
+
+void 
+fd_close (int fd)
+{
+    struct thread *cur = thread_current ();
+	struct file *file;
+
+	if (fd < 2 || fd >= FD_MAX)
+		return;
+
+	file = cur->fd_table[fd];
+	if (file == NULL)
+		return;
+
+	cur->fd_table[fd] = NULL;
+
+	lock_acquire (&filesys_lock);
+	file_close (file);
+	lock_release (&filesys_lock);
+}
+
+void
+fd_close_all (void)
+{
+	for (int fd = 2; fd < FD_MAX; fd++)
+		fd_close (fd);
+}
+
+bool
+fd_duplicate_all (struct thread *dst, struct thread *src)
+{
+	for (int fd = 2; fd < FD_MAX; fd++) {
+		struct file *src_file = src->fd_table[fd];
+		struct file *dup;
+
+		if (src_file == NULL)
+			continue;
+
+		lock_acquire (&filesys_lock);
+		dup = file_duplicate (src_file);
+		lock_release (&filesys_lock);
+
+		if (dup == NULL) {
+			for (int i = 2; i < fd; i++) {
+				if (dst->fd_table[i] != NULL) {
+					lock_acquire (&filesys_lock);
+					file_close (dst->fd_table[i]);
+					lock_release (&filesys_lock);
+					dst->fd_table[i] = NULL;
+				}
+			}
+			return false;
+		}
+
+		dst->fd_table[fd] = dup;
+	}
+
+	dst->next_fd = src->next_fd;
+	return true;
 }
