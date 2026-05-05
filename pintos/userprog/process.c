@@ -66,7 +66,8 @@ process_create_initd (const char *file_name)
 		return TID_ERROR;
 
 	/* "args-single one two" 같은 전체 명령줄을 페이지에 복사한다.
-	   이 복사본은 새 thread의 initd()가 받아서 process_exec()에 넘긴다. */
+	   이 복사본은 새 thread의 initd()가 받아서 process_exec()에 넘긴다.
+		 복사본을 넘기지 않고 그냥 filename을 thread_create의 aux 인자로 넘기면 위험하다. */
 	strlcpy (fn_copy, file_name, PGSIZE);
 
 	/* 첫 공백 전까지 길이를 구한다.
@@ -84,9 +85,12 @@ process_create_initd (const char *file_name)
 	thread_name[name_len] = '\0';
 
 	/* 새 kernel thread를 만든다.
-	   스레드 이름은 실행 파일 이름만 사용하고, 실제 실행에 필요한
-	   데이터는 전체 명령줄 복사본 fn_copy를 aux로 넘긴다.
-	   새 thread가 시작되면 kernel_thread()를 거쳐 initd(fn_copy)를 호출한다. */
+	   스레드 이름은 실행 파일 이름만 사용하고,
+		 그 스레드의 시작 함수로 initd를 등록한다. 스레드 실행에 필요한
+	   데이터는 전체 명령줄 복사본 fn_copy를 aux 인자로 넘긴다.
+		 새 스레드를 ready queue에 넣는다.
+	   새 thread가 시작되면 kernel_thread()를 거쳐 initd(fn_copy)를 호출한다.
+		 나중에 스케줄러가 이 스레드를 실행시키면 initd(aux)부터 시작하게 해라.*/
 	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
 
 	/* 스레드 생성 실패 시 아까 잡은 페이지를 반환한다. */
@@ -205,8 +209,8 @@ process_exec (void *f_name)
 {
 	char *file_name = f_name;
 	bool success;
-	/* 파싱 결과 담을 배열 */
-	char **argv_tokens = palloc_get_page (0);
+	/* 파싱 결과 담을 페이지(포인터 연산으로 배열처럼 이용) */
+	char **argv_tokens = palloc_get_fpage (0);
 	if (argv_tokens == NULL) {
 		palloc_free_page(file_name);
 		return -1;
@@ -236,22 +240,27 @@ process_exec (void *f_name)
 	argv_tokens[argc] = NULL;
 
 	/* thread 구조체의 intr_frame은 사용할 수 없습니다.
-	 * 그 이유는 현재 스레드가 다시 스케줄될 때
-	 * 실행 정보를 해당 멤버에 저장하기 때문입니다. (복구할 실행 상태 저장, 스케줄링 재개용)
-	 * 아래는 user mode에서 사용자 코드 영역을 실행하고, 사용자 데이터/스택 영역을 쓰도록 준비 시키는 것.
-	 * 스레드 구조체 안의 intr_frame을 못 쓰니, 지역 변수로 새롭게 만들어주는 것이다. */
+	 * 그 이유는 intr_frame에는 현재 스레드가 다시 스케줄될 때 이전 실행 정보를 저장하기 때문입니다. (복구할 실행 상태 저장, 스케줄링 재개용)
+	 * 아래는 user mode에서 사용자 코드 영역을 실행하고, 사용자 데이터/스택 영역을 쓰도록 준비 시키는 것이기 때문에,
+	 * 스레드 구조체 안의 intr_frame을 못 쓰니 지역 변수로 새롭게 만들어주는 것입니다.
+	 * 새 유저 프로그램을 main(argc, argv) 쪽으로 시작시키기 위한 CPU 상태를 저장
+	*/
 	struct intr_frame _if; // user mode로 진입 시 CPU 레지스터들이 어떤 값이어야 하는지를 담는 임시 구조체
 	_if.ds = _if.es = _if.ss = SEL_UDSEG; // user data segment 사용
 	_if.cs = SEL_UCSEG; // user code segment 사용
 	_if.eflags = FLAG_IF | FLAG_MBS; // 인터럽트 허용 + 반드시 켜져 있어야 하는 기본 비트 설정
 
-	/* 먼저 현재 컨텍스트를 종료합니다 */
+	/* 먼저 현재 컨텍스트를 종료합니다 
+	 * 새 프로세스가 시작되는 상황에서는 방어적인 정리이지만,
+	 * 이미 유저 프로그램을 실행 중인 프로세스가 system call exec을 실행하는 경우에는 의미 있게 동작.
+	 * 기존 유저 프로그램의 주소 공간, 페이지 테이블(pml4), supplemental page table, 매핑된 유저 메모리 등을 정리
+	 * */
 	process_cleanup ();
 
-	/* 그런 다음 바이너리를 로드합니다 
+	/* 그런 다음 바이너리를 로드합니다 -> 컴파일된 실행 파일(.o, binary)을 파일 시스템에서 읽어서, 그 프로그램이 실행될 수 있도록 현재 프로세스의 유저 메모리에 올리고, 시작 주소와 스택을 세팅한다.
 		 parsing 이후이기 때문에, 첫 인자로 argv_tokens[0]을 넘겨주어야 한다.
 	*/
-	success = load (argv_tokens[0], &_if, argc, argv_tokens);
+	success = load (argv_tokens[0], &_if, argc, argv_tokens); // argv_tokens[0]에 해당하는 실행 파일을 찾아 메모리에 올리고, argv_tokens에 있는 인자들을 유저 스택에 올려서 성공하면 1, 실패하면 0 반환
 
 	/* 로드에 실패하면 종료합니다. 
 		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
@@ -313,16 +322,20 @@ process_cleanup (void)
 
 	uint64_t *pml4;
 	/* 현재 프로세스의 page directory를 파괴하고 kernel-only page directory로 다시 전환합니다. */
-	pml4 = curr->pml4;
+	pml4 = curr->pml4; // 현재 프로세스의 페이지 테이블 가져오기
 	if (pml4 != NULL)
 	{
 		/* 여기서 올바른 순서는 매우 중요합니다.  timer interrupt가 프로세스 page directory로 되돌아가지 못하도록
-		 * cur->pagedir를 page directory 전환 전에 NULL로 설정해야 합니다.  프로세스의 page directory를
+		 * cur->pagedir를 page directory 전환 전에 NULL로 설정해야 합니다. 프로세스의 page directory를
 		 * 파괴하기 전에 base page directory를 활성화해야 합니다.  그렇지 않으면 현재 활성화된 page directory가
-		 * 이미 해제되어 비워진 것을 가리키게 됩니다. */
-		curr->pml4 = NULL;
-		pml4_activate (NULL);
-		pml4_destroy (pml4);
+		 * 이미 해제되어 비워진 것을 가리키게 됩니다. 
+		 * 쉽게 말하면:
+		 * 낡은 pml4를 먼저 thread 구조체에서 끊어내고 -> 그 다음 CPU에서도 끊어내고 -> 그 다음 메모리에서 파괴
+		 * 만약 curr->pml4 = NULL; 이 나중에 있을 경우, 인터럽트나 컨텍스트 스위칭 발생 후 process_activate가 curr->pml4가 NULL이 아니라서 destroy 될 예정이거나 destroy 된 page table을 다시 활성화할 수도 있음
+		 * */
+		curr->pml4 = NULL; // 이 스레드는 이제 기존 유저 주소 공간이 없다. 이 코드를 아래 두 줄보다 먼저 써줘야, 중간에 timer interrupt 같은게 들어와도 이미 현재 스레드의 주소 공간을 해제 했기 때문에 안전함 (disconnect with the struct thread)
+		pml4_activate (NULL); // CPU는 항상 어떤 페이지 테이블을 하나를 참고하는데, 그것을 기존 유저 프로그램 페이지 테이블 -> 커널 전용 페이지 테이블로 전환하는 함수, 내가 밟고 있는 발판 destroy 전에 커널 발판으로 옮겨가는 것 (disconnect with CPU)
+		pml4_destroy (pml4); // 기존 유저 주소 공간 실제로 해제 (disconnect with memory)
 	}
 }
 
@@ -417,26 +430,31 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	void *argv_addr;
 
 	/* page directory를 할당한다.
-		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말
+		 이 사용자 프로그램만의 가상 메모리 주소표를 새로 만든다는 말 (현재 스레드가 사용할 새 유저 주소 공간 생성)
 	*/
 	t->pml4 = pml4_create ();
 
 	/* 실패하면 load 실패 */
 	if (t->pml4 == NULL)
 		goto done;
-	/* 현재 스레드의 페이지 테이블 활성화
+	/* 현재 스레드의 페이지 테이블 활성화 (CPU에게 이제 이 page table 참고하라고 명령)
 		 이제 CPU가 이 프로그램의 page table을 기준으로 물리 주소 <-> 가상 주소 변환
 	*/
 	process_activate (thread_current ());
 
 	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
-	file = filesys_open (file_name);
+	file = filesys_open (file_name); // pintos file system 내부에서 file_name에 해당하는 실행 파일 찾기
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", argv_tokens[0]);
 		goto done;
 	}
 
-	/* ELF(실행 파일) 헤더를 읽고, 진짜 실행 가능한 ELF 파일인지 검증 */
+	/* ELF(Linux 계열에서 쓰는 실행 파일 형식) 헤더를 읽고, 진짜 실행 가능한 ELF 파일인지 검증
+	 * ELF header는 실행 파일의 맨 앞에 있는 큰 설명서입니다.
+ 	 * 여기에는 "이 파일이 실행 파일이 맞는지",
+ 	 * "어떤 아키텍처용인지",
+ 	 * "program header가 어디에 몇 개 있는지" 같은 정보가 들어 있습니다.
+	*/
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -448,31 +466,38 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 		goto done;
 	}
 
-	/* 프로그램 헤더를 순회하며 읽습니다.
-		 ELF 안에 있는 "어느 부분을 메모리에 올릴지" 설명서를 하나씩 읽는 것
-	*/
+	/* ELF 파일 안의 program header들을 하나씩 읽습니다.
+ 	 *
+ 	 * program header는 실행 파일 안의 각 구역을
+ 	 * "파일의 어느 위치에서 읽어서",
+ 	 * "유저 가상 메모리의 어느 주소에 올려야 하는지"
+ 	 * 설명하는 작은 설명서입니다.
+ 	 *
+ 	 * 모든 header가 실제로 메모리에 올라가는 것은 아니고,
+ 	 * PT_LOAD 타입인 header만 실제 코드/데이터 세그먼트로 메모리에 적재됩니다.
+ 	 */
 	file_ofs = ehdr.e_phoff;
 
 	/* 각 프로그램 헤더를 순회하며 메모리에 적재할 세그먼트를 찾는다. */
 	for (i = 0; i < ehdr.e_phnum; i++) {
 		struct Phdr phdr;
 
-		/* 오프셋이 파일 범위를 벗어나면 실패 */
+		/* program header를 읽을 위치가 파일 범위를 벗어나면 잘못된 ELF입니다. */
 		if (file_ofs < 0 || file_ofs > file_length (file))
 			goto done;
 
-		/* 해당 위치로 이동 */
+		/* 현재 program header 위치로 이동합니다. */
 		file_seek (file, file_ofs);
 
 		/* 프로그램 헤더 1개 읽기 */
 		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
 			goto done;
 
-		/* 다음 헤더 위치로 이동 */
+		/* 현재 program header 위치로 이동합니다. */
 		file_ofs += sizeof phdr;
 
 		switch (phdr.p_type) {
-			/* 무시해도 되는 타입들 */
+			/* 이 타입들은 Pintos에서 실제 메모리에 올릴 필요가 없으므로 무시합니다. */
 			case PT_NULL:
 			case PT_NOTE:
 			case PT_PHDR:
@@ -480,7 +505,9 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			default:
 				break;
 
-			/* 지원하지 않는 타입은 실패 처리 */
+			/* 동적 링킹 관련 세그먼트입니다.
+			 * Pintos는 동적 링킹을 지원하지 않으므로 이런 ELF는 로드 실패 처리합니다.
+			 */
 			case PT_DYNAMIC:
 			case PT_INTERP:
 			case PT_SHLIB:
@@ -489,26 +516,43 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 				 ELF 파일 내부에서도 실제 실행에 필요한 code/data 구역만 메모리에 올리는 것
 			*/	
 			case PT_LOAD:
-				/* 각 세그먼트는 validate_segment()로 주소와 크기 검증
-					 이 구역을 사용자 메모리에 올려도 안전한지 확인하는 것
-				*/
+				/* PT_LOAD는 실제 실행에 필요한 세그먼트입니다.
+			 	 *
+			 	 * 예를 들면:
+			 	 * - 기계어 코드 영역
+			 	 * - 읽기 전용 데이터 영역
+			 	 * - 전역 변수 데이터 영역
+			 	 *
+			 	 * 이 세그먼트들은 파일에서 읽어서
+			 	 * 현재 프로세스의 유저 가상 메모리에 매핑해야 합니다.
+			 	 */
 				if (validate_segment (&phdr, file)) {
 					/* load_segment()가 파일에서 읽을 바이트와 0으로 채울 바이트를 계산 */
 					bool writable = (phdr.p_flags & PF_W) != 0;
 
-					/* 파일 시작 페이지 경계 */
+					/* 파일에서 읽기 시작할 위치를 페이지 경계에 맞춥니다. */
 					uint64_t file_page = phdr.p_offset & ~PGMASK;
 
-					/* 메모리 시작 페이지 경계 */
+					/* 유저 가상 메모리에 올릴 시작 주소를 페이지 경계에 맞춥니다. */
 					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
 
-					/* 페이지 내부 offset */
+					/* 세그먼트가 페이지 내부 어디서 시작하는지 나타내는 offset입니다. */
 					uint64_t page_offset = phdr.p_vaddr & PGMASK;
 
 					/* 읽어올 바이트 수와 0으로 채울 바이트 수 */
 					uint32_t read_bytes, zero_bytes;
 
-					/* 파일 데이터가 있는 세그먼트 */
+					/* 파일에 실제 데이터가 있는 경우입니다.
+				 	 *
+				 	 * read_bytes:
+				 	 *   실행 파일에서 읽어와야 하는 바이트 수
+				 	 *
+				 	 * zero_bytes:
+				 	 *   파일에는 없지만 메모리에서는 0으로 채워야 하는 바이트 수
+				 	 *
+				 	 * 예를 들어 초기화되지 않은 전역 변수, 즉 BSS 영역은
+				 	 * 파일에 실제 값이 저장되어 있지 않고, 실행 시 0으로 채워집니다.
+				 	 */
 					if (phdr.p_filesz > 0) {
 						read_bytes = page_offset + phdr.p_filesz;
 						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE) - read_bytes;
@@ -519,7 +563,18 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
 					}
 
-					/* 실제 페이지들을 메모리에 올린다. */
+					/* 이 함수가 실제로 세그먼트를 유저 메모리에 올립니다.
+				 	 *
+				 	 * 내부적으로는 대략:
+				 	 * 1. 유저 페이지를 할당하고
+				 	 * 2. 실행 파일에서 read_bytes만큼 읽고
+				 	 * 3. 나머지 zero_bytes만큼 0으로 채우고
+				 	 * 4. 그 페이지를 mem_page부터 시작하는 유저 가상 주소에 매핑합니다.
+					 *
+				 	 * writable 값은 이 세그먼트가 쓰기 가능한 영역인지 결정합니다.
+				 	 * 코드 영역은 보통 writable=false,
+				 	 * 데이터 영역은 보통 writable=true입니다.
+				 	 */
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
 						goto done;
@@ -530,14 +585,17 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 		}
 	}
 
-	/* setup_stack()으로 사용자 스택 최상단 아래 1페이지를 매핑한다.
-		 사용자 프로그램이 쓸 스택 공간 1페이지를 만들어주는 것
+	/* 유저 주소 공간의 맨 위쪽에 스택용 페이지 하나를 만들어준다.
+	 * 내부적으로
+	 * 1. 커널에서 물리 페이지 하나를 할당한다.
+	 * 2. 그 페이지를 유저 가상 주소 USER_STACK - PGSIZE 위치에 매핑한다.
+   * 3. if_->rsp를 USER_STACK으로 설정한다. (스택 포인터는 빈 스택의 초기 rsp 값, 스택의 가장 높은 주소 경계를 가리키게 됨)
 	*/
 	if (!setup_stack (if_))
 		goto done;
 
-	/* ELF 엔트리 주소를 if_->rip에 저장
-		 프로그램이 처음 실행될 시작 주소를 CPU 상태에 넣어두는 것
+	/* ELF 엔트리 주소(실행 파일의 시작 주소)를 if_->rip에 저장 (instruction pointer, 즉 CPU가 다음에 실행할 명령어의 주소에 저장하는 것)
+		 프로그램이 처음 실행될 시작 주소를 CPU 상태에 넣어두는 것, do_iret()으로 유저 모드에 들어갈 때, CPU가 ehdr.e_entry 주소부터 실행하게 됨.
 	*/
 	if_->rip = ehdr.e_entry;
 
@@ -545,7 +603,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
 	uintptr_t rsp = if_->rsp;
 
-	/* 스택에 인자 문자열 자체를 먼저 복사해 push */
+	/* 스택에 인자 문자열 자체를 먼저 복사해 역순으로 push */
 	for (int i = argc - 1; i >= 0; i--) {
 		int len = strlen(argv_tokens[i]) + 1; // 문자열 끝 \0 포함
 		rsp -= len; // 문자열 길이만큼 메모리 낮은 주소로 가서 높은 주소 방향으로 문자열 복사
@@ -553,6 +611,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			goto done; // rsp가 계속 작아지다가 USER_STACK - PGSIZE 보다 작아지면, 할당된 스택 page 바깥이라 잘못된 접근
 		} 
 		memcpy((void *) rsp, argv_tokens[i], len);
+		/* 이후 argv 배열(명령어 문자열 인자들의 주소 배열)을 스택에 저장하기 위해 주소들을 arg_addr에 저장 */
 		arg_addr[i] = (void *) rsp;
 	}
 	/* rsp는 원래 uintptr_t 타입이므로, rsp를 8로 나눈 나머지를 원래 rsp에서 빼주면 8의 배수로 내림 정렬이 된다.*/
@@ -574,7 +633,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 	/* 스택에 각 인자 문자열 주소를 push 
 	 * 이 스택 주소에는 char * 값 하나가 저장되어야한다. (실제 문자열의 주소)
-	 * 그러면 rsp는 char * 타입의 데이터를 담고 있는 주소니까, char ** 타입이고, 그 안의 내용을 arg_addr[i]로 대입해주어야 하니 역참조 필요
+	 * 그러면 rsp는 char * 타입의 데이터를 담고 있는 주소니까, char ** 타입으로 캐스팅하고, 그 안의 내용을 arg_addr[i]로 대입해주어야 하니 역참조(*) 필요
 	 */
 	for (int i = argc - 1; i >= 0; i--) {
 		rsp -= 8;

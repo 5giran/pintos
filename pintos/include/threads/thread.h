@@ -109,7 +109,10 @@ struct thread {
 #endif
 
 	/* thread.c가 소유한다. */
-	struct intr_frame tf;               /* 전환에 필요한 정보. */
+	/* Context Switching 에 필요한 정보, CPU 상태를 저장해둔 구조체 
+	 * CPU가 나중에 다시 실행을 이어가기 위해 필요한 레지스터 묶음 (세이브 파일이라 생각하면 편하다)
+	*/
+	struct intr_frame tf;               
 	unsigned magic;                     /* stack overflow를 감지한다. */
 };
 
