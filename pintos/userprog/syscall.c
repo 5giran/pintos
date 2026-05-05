@@ -77,6 +77,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 		/* 현재 파일 열기 */
 		case SYS_OPEN: {
 			// 당장 테스트가 안돌아가서 이렇게만
+			char *file_name = copy_in_string ((const char *) f->R.rdi);
+  			palloc_free_page (file_name);
 			f->R.rax = 2;
   			break;
 
@@ -309,29 +311,32 @@ copy_out (void *udst, const void *src, size_t size)
 char *
 copy_in_string (const char *ustr)
 {
-	/* 한바이트씩 검사하고 복사 (어디까지 읽을지 모르니까) */
 	if (ustr == NULL) exit_with_status (-1);
 	// NULL 아니면 1바이트씩 추적 가능하게 타입 캐스팅
 	const uint8_t *us = (const uint8_t *) ustr;
+	
+	// 검증과 kbuf 할당 분리, 현재는 검증단계
+	size_t i = 0;
+	// kbuf는 한 페이지짜리 커널 버퍼이므로, PGSIZE 바이트까지만 복사한다.
+	while (i < PGSIZE) {
+		validate_user_read (us+i, 1);
+		if (us[i] == '\0') {
+			// 정상 종료, 할당 로직으로 넘어가야함.
+			break;
+		} else {
+			i++;
+		}
+	}
+	/* 여기까지 왔다는 건 0..PGSIZE-1 범위에서 '\0'을 못 찾았다는 뜻이다.
+   ustr[PGSIZE]는 허용 범위 밖이므로 읽지 않고 실패 처리한다. */
+	if (i == PGSIZE) exit_with_status (-1);
+
 
 	// 커널 버퍼 할당, 0: flag, 옵션 없음
 	char *kbuf = palloc_get_page (0);
 	if (kbuf == NULL) exit_with_status (-1);
 
-	size_t i = 0;
-	// kbuf는 한 페이지짜리 커널 버퍼이므로, PGSIZE 바이트까지만 복사한다.
-	while (i < PGSIZE) {
-		copy_in (kbuf+i, us+i, 1);
-		if (kbuf[i] == '\0') {
-			// '\0'를 만나 종료되는건 정상 종료, 커널 버퍼를 반환해야함.
-			return kbuf;
-		} else {
-			i++;
-		}
-	}
-	// palloc으로 할당한 커널 버퍼 free 해주기
-	palloc_free_page(kbuf);
-	// 정상 종료 분기에 들지 못했으니 실패
-	exit_with_status(-1);
-	return NULL;
+	// size는 '\0'도 같이 읽기 위해서
+	copy_in (kbuf, us, i+1);
+	return kbuf;
 }

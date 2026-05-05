@@ -36,18 +36,18 @@
       "last_action": "run"
     },
     "tests/userprog/write-normal": {
-      "count": 1,
-      "last_used": 1777916579.371,
+      "count": 6,
+      "last_used": 1777963949.384,
       "last_action": "run"
     },
     "tests/userprog/write-boundary": {
-      "count": 5,
-      "last_used": 1777919024.587,
+      "count": 7,
+      "last_used": 1777968758.752,
       "last_action": "run"
     },
     "tests/userprog/write-bad-ptr": {
-      "count": 3,
-      "last_used": 1777916732.626,
+      "count": 5,
+      "last_used": 1777963840.613,
       "last_action": "run"
     },
     "tests/userprog/write-zero": {
@@ -56,23 +56,23 @@
       "last_action": "run"
     },
     "tests/userprog/write-stdin": {
-      "count": 3,
-      "last_used": 1777916732.626,
+      "count": 5,
+      "last_used": 1777963933.463,
       "last_action": "run"
     },
     "tests/userprog/write-bad-fd": {
-      "count": 3,
-      "last_used": 1777916732.626,
+      "count": 4,
+      "last_used": 1777963910.827,
       "last_action": "run"
     },
     "tests/userprog/read-normal": {
-      "count": 5,
-      "last_used": 1777919092.159,
+      "count": 12,
+      "last_used": 1777963940.912,
       "last_action": "run"
     },
     "tests/userprog/read-bad-ptr": {
-      "count": 1,
-      "last_used": 1777916641.13,
+      "count": 4,
+      "last_used": 1777963785.79,
       "last_action": "run"
     },
     "tests/userprog/read-boundary": {
@@ -86,13 +86,38 @@
       "last_action": "run"
     },
     "tests/userprog/read-stdout": {
-      "count": 1,
-      "last_used": 1777916664.305,
+      "count": 2,
+      "last_used": 1777963925.764,
       "last_action": "run"
     },
     "tests/userprog/read-bad-fd": {
+      "count": 2,
+      "last_used": 1777963918.643,
+      "last_action": "run"
+    },
+    "tests/userprog/open-boundary": {
       "count": 1,
-      "last_used": 1777916670.859,
+      "last_used": 1777968711.873,
+      "last_action": "run"
+    },
+    "tests/userprog/create-bound": {
+      "count": 1,
+      "last_used": 1777968730.942,
+      "last_action": "run"
+    },
+    "tests/userprog/bad-read": {
+      "count": 1,
+      "last_used": 1777968847.742,
+      "last_action": "run"
+    },
+    "tests/userprog/bad-write": {
+      "count": 1,
+      "last_used": 1777968857.281,
+      "last_action": "run"
+    },
+    "tests/userprog/create-bad-ptr": {
+      "count": 1,
+      "last_used": 1777969976.165,
       "last_action": "run"
     }
   }
