@@ -993,7 +993,85 @@ list_entry (e, struct child_status, elem)
 
 `child_status`라는 typedef를 만든 적이 없다면 `struct`를 빼면 안 된다.
 
-## 29. 현재 단계에서 기억할 것
+## 29. `process_wait()`은 왜 child 종료 상태를 반환하는가
+
+`process_wait(child_tid)`는 parent 자신의 종료 상태를 정하는 함수가 아니다. parent가 만든 child가 어떤 결과로 끝났는지 받아 오는 함수다.
+
+child를 만든다는 것은 보통 parent가 어떤 일을 child에게 맡긴다는 뜻이다.
+
+```text
+parent
+  child 생성
+  child에게 일 맡김
+
+child
+  일을 수행
+  exit(status)로 결과를 남김
+
+parent
+  wait(child)
+  child가 남긴 status를 받아 다음 행동 결정
+```
+
+예를 들어 shell이 compiler를 실행하는 상황을 생각하면 쉽다.
+
+```text
+shell(parent)
+  gcc 실행(child)
+
+gcc(child)
+  컴파일 성공 -> exit(0)
+  컴파일 실패 -> exit(1)
+
+shell(parent)
+  wait(gcc)
+  반환된 status가 0이면 다음 명령 진행
+  1이면 실패 처리
+```
+
+그래서 child가 `exit(57)`을 호출하면, child의 종료 경로는 parent와 공유하는 child status record에 그 값을 남긴다.
+
+```text
+child process_exit()
+  cs->exit_status = 57
+  cs->has_exited = true
+```
+
+parent의 `process_wait()`은 child가 아직 살아 있으면 기다리고, child가 종료했으면 그 값을 반환한다.
+
+```text
+parent process_wait(child_tid)
+  child가 살아 있으면 기다림
+  child가 남긴 cs->exit_status 읽음
+  record 정리
+  child status 반환
+```
+
+여기서 헷갈리면 안 되는 구분은 다음이다.
+
+```text
+thread_current()->exit_status
+  현재 parent process 자신이 나중에 종료할 때 남길 status
+
+cs->exit_status
+  child process가 종료하면서 parent에게 남긴 status
+
+process_wait() 반환값
+  cs->exit_status
+```
+
+따라서 `process_wait()`에서 child의 종료 상태를 parent의 `exit_status`에 덮어쓰면 의미가 섞인다. child status는 지역 변수에 저장해서 반환하고, parent 자신의 `exit_status`는 건드리지 않는 편이 맞다.
+
+`wait()`이 "수거"라고 불리는 이유는 두 가지 일을 같이 하기 때문이다.
+
+```text
+1. child가 남긴 종료 결과를 회수한다.
+2. parent가 들고 있던 child status record 참조를 정리한다.
+```
+
+즉 `process_wait()`은 기다리는 함수이면서, child의 종료 결과와 record를 회수하는 함수다.
+
+## 30. 현재 단계에서 기억할 것
 
 현재 구현은 `exit` 기본 구현, `process_create_initd()`의 child status 연결, `process_exit()`의 child status 기록과 children 정리까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
 
@@ -1009,5 +1087,6 @@ list_entry (e, struct child_status, elem)
 - `child_status_create()`, `child_status_find()`, `child_status_release()`의 기본 흐름은 구현했다.
 - `process_create_initd()`는 child status record를 만들고 `initd(aux)`로 child에게 넘기는 흐름까지 연결했다.
 - `process_exit()`은 child로서 status를 기록하고, parent로서 wait하지 않은 children record를 release한다.
+- `process_wait()`은 child의 종료 상태를 반환해야 하며, parent 자신의 `exit_status`를 덮어쓰면 안 된다.
 - 다음은 이 helper들을 `process_wait()`, `process_fork()`에 연결할 차례다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.

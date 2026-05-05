@@ -702,11 +702,68 @@ while children list가 비어 있지 않음
 
 이 정리는 parent가 child를 만들고 wait하지 않은 채 종료되는 경우 필요하다. parent 몫 참조를 내려놓으면, child가 이미 종료되어 child 몫도 내려놓은 경우 record가 free된다. child가 아직 살아 있다면 record는 child 몫 참조 때문에 남아 있고, child가 나중에 exit하면서 최종 release한다.
 
-현재 한계는 `process_wait()`이 아직 구현되지 않았다는 점이다. `process_wait()`은 wait으로 회수한 child record를 parent의 `children` list에서 제거하고 parent 몫 참조를 release해야 한다. 그래야 parent가 나중에 exit할 때 같은 record를 다시 release하지 않는다.
+현재 한계는 `process_wait()`이 아직 구현되지 않았다는 점이다. `parent->children` list는 parent가 만든 child record들의 장부다. `process_wait()`으로 어떤 child의 status를 회수했다면, 그 child record 항목을 이 장부에서 먼저 제거해야 한다. 그 다음 parent가 그 record에 대해 들고 있던 참조를 `child_status_release()`로 내려놓는다. 이렇게 해야 나중에 parent가 exit하면서 `children` list를 정리할 때, 이미 wait에서 처리한 record를 다시 만지지 않는다.
 
-## 6. 현재 상태와 이후 기록 위치
+## 6. `process_wait()` 반환값 맥락
 
-현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했고, `process_exit()`에는 child status 기록과 children record 정리 흐름을 연결했다. 다음 단계는 이 helper들을 `process_wait()`과 `process_fork()` 경로에 연결하는 것이다.
+`process_wait(child_tid)`는 단순히 child가 끝날 때까지 멈추는 함수가 아니다. parent가 child에게 맡긴 일이 어떤 결과로 끝났는지 회수하는 함수다.
+
+흐름은 다음처럼 볼 수 있다.
+
+```text
+parent
+  child process 생성
+  child에게 일을 맡김
+
+child
+  일을 수행함
+  exit(status)로 결과를 남기고 종료
+
+parent
+  process_wait(child_tid)
+  child가 남긴 status를 반환값으로 받음
+```
+
+예를 들어 child가 `exit(57)`로 종료하면, child의 `process_exit()`은 parent와 공유하는 child status record에 `57`을 저장한다.
+
+```text
+child process_exit()
+  cs->exit_status = 57
+  cs->has_exited = true
+  sema_up(&cs->wait_sema)
+```
+
+parent의 `process_wait()`은 child가 아직 살아 있으면 기다렸다가, child가 종료한 뒤 이 값을 읽어 반환한다.
+
+```text
+parent process_wait(child_tid)
+  child가 살아 있으면 sema_down(&cs->wait_sema)
+  status = cs->exit_status
+  list_remove(&cs->elem)
+  child_status_release(cs)
+  return status
+```
+
+여기서 반환해야 하는 값은 parent 자신의 `exit_status`가 아니다.
+
+```text
+parent->exit_status
+  parent 자신이 나중에 종료할 때 남길 값
+
+child_status->exit_status
+  child가 종료하면서 parent에게 남긴 값
+
+process_wait() 반환값
+  child_status->exit_status
+```
+
+따라서 `process_wait()`에서는 child의 status를 지역 변수에 저장한 뒤 반환하고, parent의 `thread_current()->exit_status`를 덮어쓰지 않는다.
+
+`process_wait()`은 status 회수와 함께 record 정리도 맡는다. 이때 제거되는 것은 child process 자체가 아니라 parent의 `children` list에 들어 있던 `child_status` record 항목이다. 순서는 `status 저장 -> list_remove(&cs->elem) -> child_status_release(cs)`가 되어야 한다. release에서 record가 free될 수 있으므로, `cs->elem`을 만지는 `list_remove()`를 먼저 끝내야 한다.
+
+## 7. 현재 상태와 이후 기록 위치
+
+현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했고, `process_exit()`에는 child status 기록과 children record 정리 흐름을 연결했다. 다음 단계는 `process_wait()` 구현을 완성하고, 이후 `process_fork()` 경로에도 같은 lifecycle record 구조를 연결하는 것이다.
 
 현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
@@ -730,10 +787,10 @@ while children list가 비어 있지 않음
 앞으로 구현이 추가되면 이 문서에 다음 section을 이어서 추가한다.
 
 ```text
-7. process_wait()
-8. process_fork()
-9. process_exec()
-10. Rox 처리
+8. process_wait 완성
+9. process_fork()
+10. process_exec()
+11. Rox 처리
 ```
 
 각 section은 실제 구현 코드와 함께 "이전 구조", "현재 변경", "설계 의도", "남은 한계"를 짧게 기록한다.

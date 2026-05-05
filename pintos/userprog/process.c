@@ -384,30 +384,47 @@ process_exec (void *f_name)
 	NOT_REACHED ();
 }
 
-/* TID 스레드가 종료될 때까지 기다렸다가 종료 상태를 반환합니다. 커널에 의해 종료되었다면(즉, 예외로 인해 강제 종료되었다면)
- * -1을 반환합니다.  TID가 유효하지 않거나 호출한 프로세스의 자식이 아니거나, 해당 TID에 대해 process_wait()가 이미
- * 성공적으로 호출되었다면, 기다리지 않고 즉시 -1을 반환합니다.
- * 
- * 이 함수는 문제 2-2에서 구현됩니다.  현재는 아무 작업도 하지 않습니다. */
+/* 1. 내 child가 맞는지 확인한다.
+2. 아직 살아 있으면 끝날 때까지 기다린다.
+3. child가 남긴 exit_status를 읽는다.
+4. 그 status를 parent에게 반환한다.
+5. child record를 정리한다. */
 int 
-process_wait (tid_t child_tid UNUSED)
+process_wait (tid_t child_tid)
 {
 	/* XXX: 힌트) pintos는 process_wait (initd)에서 종료합니다. process_wait를 구현하기 전에
 	 * XXX:       여기서 무한 루프를 추가하는 것을 권장합니다. */
 	/* 현재는 임시적으로 구현 */
 
 	/* 이 함수가 호출 되었을 때 자식 프로세스가 살아있다면 부모 프로세스는 왜 잠들어야할까?
-	 * child가 수정할 수 있는 record(공유 자료)를 parent가 접근하면 안되기도 하고, busy wait을 하자니
+	 * child가 수정할 수 있는 record(공유 자료)를 parent가 접근하면 안되기도 하고, busy wait을 하자니 CPU 낭비가 너무 심함. 제대로 기다리는 것도 아니고.
 	 */
-
-
-	int cnt = 0;
-
-	while (cnt < 1000000000) {
-		cnt++;
+	struct thread *curr = thread_current ();
+	struct child_status *cs = child_status_find (curr, child_tid);
+	
+	if (cs == NULL) {
+		return -1;
 	}
+	/* 이미 현재 스레드가 wait 권한 사용했을 경우 */
+	if (cs->has_been_waited) {
+		return -1;
+	}
+	/* wait 권한 살아있을 경우 */
+	cs->has_been_waited = true;
+	/* 아직 살아있을 경우 */
+	if (!cs->has_exited) {
+		sema_down (&(cs->wait_sema));
+	}
+	/* sema_up 이후 아래 코드 실행 혹은 자식이 이미 exit 했을 경우에는 바로 실행됨 */
 
-	return 0;
+	/* 반환할 자식 스레드의 exit_status를 저장 */
+	int child_es = cs->exit_status;
+	/* 현재 스레드의 children list 에서 종료된 자식 스레드 제거 */
+	list_remove (&(cs->elem));
+	/* 현재 스레드(parent) 몫의 ref_cnt release */
+	child_status_release (cs);
+			
+	return child_es;
 }
 
 /* 프로세스를 종료합니다. 이 함수는 thread_exit ()에서 호출됩니다. */
