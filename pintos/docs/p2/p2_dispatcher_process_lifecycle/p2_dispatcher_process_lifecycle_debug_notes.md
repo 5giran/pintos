@@ -910,11 +910,92 @@ child
 
 이 구조 때문에 child가 parent보다 먼저 실행되어도 child는 이미 aux를 통해 `cs`를 받을 수 있다.
 
-아직 남은 연결은 `process_exit()`과 `process_wait()`이다. 지금은 record를 만들고 parent/child가 같은 record를 가리키게 했을 뿐, child가 죽을 때 status를 기록하고 parent가 wait에서 회수하는 흐름은 아직 완성되지 않았다.
+아직 남은 큰 연결은 `process_wait()`이다. 지금은 record를 만들고 parent/child가 같은 record를 가리키게 했고, child가 죽을 때 `process_exit()`에서 status를 기록하는 흐름까지 연결했다. parent가 wait에서 status를 회수하는 흐름은 아직 완성되지 않았다.
 
-## 27. 현재 단계에서 기억할 것
+## 27. `curr->child_status = NULL`을 `child_status_release()` 안에 넣으면 안 되는 이유
 
-현재 구현은 `exit` 기본 구현과 `process_create_initd()`의 child status 연결까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
+처음에는 `child_status_release(cs)` 안에서 `curr->child_status = NULL`까지 처리하면 편해 보일 수 있다. 하지만 그렇게 하면 helper의 책임이 섞인다.
+
+`child_status_release(cs)`의 의미는 다음 하나다.
+
+```text
+인자로 받은 child status record의 참조 하나를 내려놓는다.
+ref_cnt--
+ref_cnt == 0이면 free
+```
+
+반면 `curr->child_status = NULL`은 현재 thread가 자기 parent에게 보고할 record pointer를 끊는 작업이다. 이 작업은 "지금 release하는 cs가 현재 thread 자신의 child_status record"라는 사실을 알고 있는 호출부에서만 해야 한다.
+
+문제가 되는 이유는 `child_status_release()`가 child만 호출하는 함수가 아니기 때문이다.
+
+```text
+child process_exit()
+  자기 parent에게 보고할 record를 release
+
+parent process_wait()
+  기다리던 child record를 release
+
+parent process_exit()
+  wait하지 않은 children record들을 release
+```
+
+예를 들어 parent가 `process_wait()`에서 어떤 child record를 release하는 중이라고 하자.
+
+```text
+cs
+  parent가 기다리던 child의 record
+
+thread_current()->child_status
+  parent 자신이 자기 parent에게 보고할 record
+```
+
+이 둘은 다른 record일 수 있다. 그런데 release helper 내부에서 무조건 `thread_current()->child_status = NULL`을 해버리면, parent 자신의 보고용 record가 잘못 끊길 수 있다.
+
+따라서 현재 구조는 다음처럼 나눈다.
+
+```text
+child_status_release(cs)
+  ref_cnt만 감소
+  필요하면 free
+
+process_exit()
+  이 cs가 현재 thread 자신의 child_status라는 것을 알고 있으므로
+  release 후 curr->child_status = NULL
+```
+
+## 28. `list_pop_front()`는 `child_status *`를 반환하지 않는다
+
+parent가 종료될 때 wait하지 않은 children record를 정리하려면 `curr->children` list를 비워야 한다.
+
+처음 구현에서 헷갈릴 수 있는 부분은 `list_pop_front()`의 반환 타입이다.
+
+```c
+struct child_status *cs = list_pop_front (&curr->children);
+```
+
+이 흐름은 잘못됐다. PintOS list에 들어 있는 것은 `struct child_status` 자체가 아니라 record 안의 `struct list_elem elem`이다. 따라서 `list_pop_front()`는 `struct list_elem *`를 반환한다.
+
+올바른 흐름은 다음이다.
+
+```c
+struct list_elem *e = list_pop_front (&curr->children);
+struct child_status *cs = list_entry (e, struct child_status, elem);
+child_status_release (cs);
+```
+
+즉 list에서 꺼낸 `list_elem`을 `list_entry()`로 감싸서 원래 `struct child_status *`를 복원해야 한다.
+
+주의할 점은 `list_entry()`의 두 번째 인자도 실제 타입 이름이어야 한다는 것이다.
+
+```c
+list_entry (e, struct child_status, elem)
+```
+
+`child_status`라는 typedef를 만든 적이 없다면 `struct`를 빼면 안 된다.
+
+## 29. 현재 단계에서 기억할 것
+
+현재 구현은 `exit` 기본 구현, `process_create_initd()`의 child status 연결, `process_exit()`의 child status 기록과 children 정리까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
 
 지금 이해해야 할 핵심은 다음이다.
 
@@ -927,5 +1008,6 @@ child
 - `child_status.elem`은 parent의 `children` list용이고, semaphore waiters용이 아니다.
 - `child_status_create()`, `child_status_find()`, `child_status_release()`의 기본 흐름은 구현했다.
 - `process_create_initd()`는 child status record를 만들고 `initd(aux)`로 child에게 넘기는 흐름까지 연결했다.
-- 다음은 이 helper들을 `process_exit()`, `process_wait()`, `process_fork()`에 연결할 차례다.
+- `process_exit()`은 child로서 status를 기록하고, parent로서 wait하지 않은 children record를 release한다.
+- 다음은 이 helper들을 `process_wait()`, `process_fork()`에 연결할 차례다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.

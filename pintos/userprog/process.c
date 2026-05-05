@@ -426,9 +426,22 @@ process_exit (void)
 	if (curr->pml4 != NULL) {
 		printf ("%s: exit(%d)\n", thread_name (), curr->exit_status);
 	}
-	
-	// curr->child_status->exit_status = True
-	sema_up(curr->child_status->wait_sema);
+	struct child_status *cs = curr->child_status;
+	/* 현재 스레드가 부모 스레드를 가지고 있다면 공유 자료구조 업데이트 필요 */
+	if (cs != NULL) {
+		cs->exit_status = curr->exit_status; // 이미 system call 호출될 때, curr->exit_status 는 update 되었음. syscall.c 참고
+		cs->has_exited = true;
+		sema_up (&cs->wait_sema); // 부모 스레드가 wait_sema 에서 기다리고 있을 수 있으니, sema_up 필요
+		child_status_release (cs); // cs->ref_cnt--;, 이후 ref_cnt == 0 이면 내부적으로 free 진행
+		curr->child_status = NULL; // child_status_release() 에서 처리하게 하면 안됨. 이 함수 자체는 parent도 process_wait() 이나 다른 함수에서 호출 할 수도 있기 때문에, 우리 의도와 다르게 동작할 수 있음.
+	}
+	/* 현재 스레드가 자식을 갖고 있다면 정리 해야함 */
+	while (!list_empty (&(curr->children))) {
+		struct list_elem *e = list_pop_front (&(curr->children));
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		child_status_release (cs);
+	}
+
 	process_cleanup ();
 }
 

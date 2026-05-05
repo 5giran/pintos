@@ -4,7 +4,7 @@
 
 이 문서는 `p2_user_memory_syscall_parallel_work_guide.md`의 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox` 구현 기록을 누적해서 정리하는 문서다.
 
-구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현, parent-child status record의 초기 구조/helper, `process_create_initd()` 연결까지 기록한다.
+구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현, parent-child status record의 초기 구조/helper, `process_create_initd()` 연결, `process_exit()`의 child status 기록/정리까지 기록한다.
 
 ## 2. Exit 기본 구현
 
@@ -82,7 +82,6 @@ process_exit()
 - `process_wait()` 완성
 - `fork` 성공/실패 동기화
 - `exec` 인자 복사와 load 실패 처리 연결
-- `process_exit()`에서 child status 기록과 부모 wake-up 처리
 - `rox` 관련 실행 파일 write deny 처리
 
 또 비정상 종료 경로에서는 최종적으로 `exit_status = -1`이 보장되어야 한다. 현재는 기본값을 `-1`로 초기화했기 때문에 `thread_exit()`만 호출해도 값이 유지되지만, 코드 의도를 명확히 하려면 invalid syscall이나 invalid pointer 경로에서 `exit_status = -1`을 명시하는 편이 좋다.
@@ -631,11 +630,83 @@ initd (void *aux)
 
 이 구조에서는 child가 parent보다 먼저 실행되어도 `cs` 자체는 이미 만들어져 있고 aux로 전달되어 있다. 따라서 child는 `thread_current()->child_status`를 먼저 세팅한 뒤 실행을 계속할 수 있다.
 
-현재 한계는 `process_exit()`과 `process_wait()`이 아직 이 record를 완전히 사용하지 않는다는 점이다. 다음 단계에서 child exit 시 record에 status를 기록하고, parent wait 시 record에서 status를 회수하는 흐름을 연결해야 한다.
+현재 한계는 `process_wait()`이 아직 이 record를 완전히 사용하지 않는다는 점이다. 다음 단계에서 parent wait 시 record에서 status를 회수하는 흐름을 연결해야 한다.
 
-## 5. 현재 상태와 이후 기록 위치
+## 5. `process_exit()` child status 기록과 children 정리
 
-현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 또한 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했다. 다음 단계는 이 helper들을 `process_exit()`, `process_wait()`, `process_fork()` 경로에 연결하는 것이다.
+`process_create_initd()` 연결로 child thread는 자기 `child_status` record를 알 수 있게 되었다. 그 다음 단계는 child가 종료될 때 이 record에 종료 결과를 남기는 것이다.
+
+`process_exit()`의 현재 책임은 두 방향이다.
+
+```text
+child로서의 책임
+  내 parent가 기다릴 수 있도록 내 child_status record에 종료 결과를 기록한다.
+
+parent로서의 책임
+  내가 만든 children 중 wait하지 않은 record들에 대해 parent 몫 참조를 내려놓는다.
+```
+
+현재 구현 흐름은 다음과 같다.
+
+```c
+void
+process_exit (void)
+{
+	struct thread *curr = thread_current ();
+
+	if (curr->pml4 != NULL) {
+		printf ("%s: exit(%d)\n", thread_name (), curr->exit_status);
+	}
+
+	struct child_status *cs = curr->child_status;
+	if (cs != NULL) {
+		cs->exit_status = curr->exit_status;
+		cs->has_exited = true;
+		sema_up (&cs->wait_sema);
+		child_status_release (cs);
+		curr->child_status = NULL;
+	}
+
+	while (!list_empty (&curr->children)) {
+		struct list_elem *e = list_pop_front (&curr->children);
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		child_status_release (cs);
+	}
+
+	process_cleanup ();
+}
+```
+
+`curr->child_status`는 현재 thread가 자기 parent에게 보고할 record다. 이 값이 `NULL`일 수 있으므로 먼저 검사한다. 예를 들어 PintOS 내부 thread이거나 아직 parent-child record가 연결되지 않은 경로에서는 이 pointer가 없을 수 있다.
+
+`cs != NULL`이면 child로서 다음 순서로 parent에게 종료를 알린다.
+
+```text
+cs->exit_status = curr->exit_status
+cs->has_exited = true
+sema_up(&cs->wait_sema)
+child_status_release(cs)
+curr->child_status = NULL
+```
+
+`curr->child_status = NULL`은 `child_status_release()` 내부에 넣지 않는다. `child_status_release()`는 record의 참조 수만 줄이는 일반 helper이고, parent의 `process_wait()`이나 parent의 `process_exit()`에서도 호출된다. helper 안에서 `thread_current()->child_status`를 지우면, caller가 parent일 때 parent 자신의 parent에게 보고할 record를 잘못 지울 수 있다.
+
+그 다음 현재 thread가 parent로서 만든 children list를 비운다.
+
+```text
+while children list가 비어 있지 않음
+  list_pop_front()로 list_elem을 꺼냄
+  list_entry()로 child_status record를 복원
+  child_status_release()로 parent 몫 참조 release
+```
+
+이 정리는 parent가 child를 만들고 wait하지 않은 채 종료되는 경우 필요하다. parent 몫 참조를 내려놓으면, child가 이미 종료되어 child 몫도 내려놓은 경우 record가 free된다. child가 아직 살아 있다면 record는 child 몫 참조 때문에 남아 있고, child가 나중에 exit하면서 최종 release한다.
+
+현재 한계는 `process_wait()`이 아직 구현되지 않았다는 점이다. `process_wait()`은 wait으로 회수한 child record를 parent의 `children` list에서 제거하고 parent 몫 참조를 release해야 한다. 그래야 parent가 나중에 exit할 때 같은 record를 다시 release하지 않는다.
+
+## 6. 현재 상태와 이후 기록 위치
+
+현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했고, `process_exit()`에는 child status 기록과 children record 정리 흐름을 연결했다. 다음 단계는 이 helper들을 `process_wait()`과 `process_fork()` 경로에 연결하는 것이다.
 
 현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
@@ -647,10 +718,11 @@ initd (void *aux)
 - `child_status_release()`에서 ref count를 낮추고 0이면 free한다.
 - `process_create_initd()`에서 첫 user process용 child status record를 생성하고 parent의 `children` list에 등록한다.
 - `initd()`에서 aux로 전달받은 child status record를 현재 thread의 `child_status`에 연결한다.
+- `process_exit()`에서 현재 thread의 종료 status를 child status record에 기록하고 parent를 깨운다.
+- `process_exit()`에서 wait하지 않은 children record들의 parent 몫 참조를 release한다.
 
 다음에 이어서 구현할 작업은 다음이다.
 
-- `process_exit()`에서 자기 `child_status`에 exit status를 기록하고 parent를 깨워야 한다.
 - `process_wait()`에서 parent의 `children` list를 검색하고, `has_been_waited` 규칙을 적용해야 한다.
 - `process_fork()`에서 record를 생성해 parent의 `children`에 등록해야 한다.
 - fork child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
@@ -658,10 +730,10 @@ initd (void *aux)
 앞으로 구현이 추가되면 이 문서에 다음 section을 이어서 추가한다.
 
 ```text
-6. process_wait()
-7. process_fork()
-8. process_exec()
-9. Rox 처리
+7. process_wait()
+8. process_fork()
+9. process_exec()
+10. Rox 처리
 ```
 
 각 section은 실제 구현 코드와 함께 "이전 구조", "현재 변경", "설계 의도", "남은 한계"를 짧게 기록한다.
