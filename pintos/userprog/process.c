@@ -307,6 +307,12 @@ process_exit (void)
 	 * TODO: project2/process_termination.html).
 	 * TODO: 여기서 프로세스 자원 정리를 구현하는 것을 권장합니다. */
 
+	/* 유저 프로세스의 thread라면 종료 메시지 출력, pure kernel thread면 메시지 출력 X */
+	if (curr->pml4 != NULL) {
+		printf ("%s: exit(%d)\n", thread_name (), curr->exit_status);
+	}
+	
+
 	process_cleanup ();
 }
 

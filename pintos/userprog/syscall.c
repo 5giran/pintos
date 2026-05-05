@@ -12,7 +12,6 @@
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-static void exit_with_status (int status);
 static void check_address (const void *addr);
 
 /* 시스템 콜.
@@ -62,7 +61,9 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		/* 현재 프로세스 종료 */
 		case SYS_EXIT:
-			exit_with_status ((int) f->R.rdi);
+			/* thread_exit() 내부에서 process_exit() 호출해 현재 스레드 종료 */
+			thread_current ()->exit_status = (int) f->R.rdi;
+			thread_exit ();
 			break;
 
 		/* write(fd, buffer, size) */
@@ -100,19 +101,9 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		/* 아직 구현 안 한 syscall은 비정상 종료 */
 		default:
-			exit_with_status (-1);
+			thread_exit ();
 			break;
 	}
-}
-
-static void
-exit_with_status (int status) 
-{
-	/* 종료 메시지 출력 */
-	printf ("%s: exit(%d)\n", thread_name (), status);
-
-	/* 현재 스레드 종료 */
-	thread_exit ();
 }
 
 static void
@@ -120,5 +111,5 @@ check_address (const void *addr)
 {
 	/* NULL 이거나 유저 가상주소 범위 밖이면 비정상 종료 */
 	if (addr == NULL || !is_user_vaddr (addr))
-		exit_with_status (-1);
+		thread_exit ();
 }

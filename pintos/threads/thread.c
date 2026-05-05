@@ -575,6 +575,11 @@ init_thread(struct thread *t, const char *name, int priority)
 	/* 새 thread는 아직 donation을 받은 적이 없으므로 donations 리스트를 빈 리스트로 시작한다. */
 	list_init(&t->donations);
 
+	#ifdef USERPROG
+	/* 새 스레드의 default exit_status는 -1 이다.*/
+	t->exit_status = -1;										
+	#endif
+
 	t->magic = THREAD_MAGIC;
 }
 

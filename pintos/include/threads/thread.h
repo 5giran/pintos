@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "../../userprog/process.c"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -102,6 +103,7 @@ struct thread {
 #ifdef USERPROG
 	/* userprog/process.c가 소유한다. */
 	uint64_t *pml4;                     /* PML4 테이블 */
+	int exit_status;										/* syscall exit status */
 #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */
