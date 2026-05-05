@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "devices/input.h"
 #include "filesys/file.h"
@@ -10,11 +11,12 @@
 #include "threads/loader.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
+#include "threads/mmu.h"
+#include "threads/vaddr.h"
 #include "threads/init.h"
 #include "threads/palloc.h"
 #include "userprog/fd.h"
 #include "userprog/process.h"
-#include "userprog/uaccess.h"
 #include "intrinsic.h"
 
 
@@ -155,6 +157,127 @@ exit_with_status (int status)
 // 	if (addr == NULL || !is_user_vaddr (addr))
 // 		exit_with_status (-1);
 // }
+
+// t/f을 돌려주지 않고, 그 자리에서 프로세스를 죽이는 함수여야 공통규약에 맞음.
+// exit_with_status(-1): 현재 프로세스 바로 종료
+void
+validate_user_read (const void *buffer, size_t size)
+{
+    if (size == 0) return;
+    if (buffer == NULL) exit_with_status (-1); // size > 0인데 주소가 없다, 메모리 접근 불가.
+
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf =(const uint8_t *) buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) exit_with_status (-1); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down (bf);
+	const uint8_t *end_page = pg_round_down (end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
+		if (!is_user_vaddr (i)) exit_with_status (-1);
+		// page가 실제 mapped 되어있지 않다면 현재 프로세스 exit(-1)
+		// pml4_get_page 함수 인수 확인, thread_current()->pml4: 현재 실행중인 함수 인수 테이블
+		if (!pml4_get_page (thread_current()->pml4, i)) exit_with_status (-1);
+	}
+}
+
+void
+validate_user_write(const void *buffer, size_t size)
+{
+	if (size == 0) return;
+    if (buffer == NULL) exit_with_status(-1); // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
+
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf = (const uint8_t *) buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) exit_with_status (-1); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down (bf);
+	const uint8_t *end_page = pg_round_down (end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
+		if (!is_user_vaddr (i)) exit_with_status (-1);
+		// writable 페이지인지 검증 - PTE 사용
+		// pte가 NULL이 아닌지, *pte에 PTE_P가 있는지, *pte에 PTE_U가 있는지,  *pte에 PTE_W가 있는지 - 모두 충족해야함
+		uint64_t *pte = pml4e_walk (thread_current ()->pml4, (const uint64_t)i, false);
+
+		if (pte == NULL || (*pte & PTE_P) == 0 || (*pte & PTE_U) == 0)
+			exit_with_status (-1);
+
+		if ((*pte & PTE_W) == 0)
+			exit_with_status (-1);
+    }
+}
+
+void
+// dst: 복사 결과가 들어갈 커널 버퍼, usrc: 복사 원본 유저 메모리 주소, size: 복사할 바이트 수
+copy_in (void *dst, const void *usrc, size_t size)
+{
+	// readable 유효성 검사
+	validate_user_read (usrc, size);
+	// user memory -> kernel memory 복사
+	memcpy (dst, usrc, size);
+}
+
+// udst: 유저 메모리 목적지, src: 커널 복사 원본
+void
+copy_out (void *udst, const void *src, size_t size)
+{
+	// writable 유효성 검사
+	validate_user_write (udst, size);
+	// kernel memory -> user memory 복사
+	memcpy (udst, src, size);
+}
+
+/* TODO: user string을 kernel buffer로 복사 */
+// ustr: 유저가 넘긴 문자열 시작 주소, return: 커널 메모리에 새로 복사해 둔 문자열 주소
+char *
+copy_in_string (const char *ustr)
+{
+	if (ustr == NULL) exit_with_status (-1);
+	// NULL 아니면 1바이트씩 추적 가능하게 타입 캐스팅
+	const uint8_t *us = (const uint8_t *) ustr;
+	
+	// 검증과 kbuf 할당 분리, 현재는 검증단계
+	size_t i = 0;
+	// kbuf는 한 페이지짜리 커널 버퍼이므로, PGSIZE 바이트까지만 복사한다.
+	while (i < PGSIZE) {
+		validate_user_read (us+i, 1);
+		if (us[i] == '\0') {
+			// 정상 종료, 할당 로직으로 넘어가야함.
+			break;
+		} else {
+			i++;
+		}
+	}
+	/* 여기까지 왔다는 건 0..PGSIZE-1 범위에서 '\0'을 못 찾았다는 뜻이다.
+   ustr[PGSIZE]는 허용 범위 밖이므로 읽지 않고 실패 처리한다. */
+	if (i == PGSIZE) exit_with_status (-1);
+
+
+	// 커널 버퍼 할당, 0: flag, 옵션 없음
+	char *kbuf = palloc_get_page (0);
+	if (kbuf == NULL) exit_with_status (-1);
+
+	// size는 '\0'도 같이 읽기 위해서
+	copy_in (kbuf, us, i+1);
+	return kbuf;
+}
 
 static bool 
 sys_create (const char *ufile, unsigned initial_size)

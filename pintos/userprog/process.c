@@ -14,6 +14,8 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "userprog/syscall.h"
+#include "userprog/fd.h"
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
