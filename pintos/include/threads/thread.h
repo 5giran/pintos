@@ -5,7 +5,6 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
-#include "../../userprog/process.c"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -23,6 +22,10 @@ enum thread_status {
    원하는 타입으로 재정의해도 된다. */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* tid_t의 오류 값. */
+
+#ifdef USERPROG
+struct child_status;
+#endif
 
 /* thread priority(스레드 우선순위). */
 #define PRI_MIN 0                       /* 가장 낮은 priority. */
@@ -104,6 +107,9 @@ struct thread {
 	/* userprog/process.c가 소유한다. */
 	uint64_t *pml4;                     /* PML4 테이블 */
 	int exit_status;										/* syscall exit status */
+
+	struct list children;								/* 현재 thread가 생성한 direct child들의 child status record 목록 (요소 자체가 child_status) */
+	struct child_status *child_status;  /* 현재 thread의 parent에게 넘길 현재 thread의 record */
 #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */

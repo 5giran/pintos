@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "../include/threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -28,6 +29,18 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
 static void initd (void *f_name);
 static void __do_fork (void *);
+
+
+/* 이 구조체는 parent 프로세스(스레드)와 child 프로세스(스레드)가 서로 시간차를 두고 만나는 장소라고 바라보면 편하다. */
+struct child_status {
+	tid_t tid;										/* child thread id */
+	int exit_status;							/* child thread의 exit_status */
+	bool is_child_exit;						/* child thread가 이미 종료 되었다면 1, 살아있다면 0 */
+	bool is_parent_wait;					/* 이 child thread의 parent가 이 child에 대한 wait 권한을 이미 사용했는지, 한 child에 대한 wait 권한은 일회용임. 1이면 이미 회수했거나 회수 예정이라 다시 wait하면 안 되는 상태 */
+
+	struct semaphore wait_sema;		/* is_child_exit이 false라면, parent process는 child exit 될 때 까지 이 semaphore에서 sleep */
+	struct list_elem elem;				/* parent->children에 child_status record를 매달기 위한 elem, waiters 안에 들어갈 것이 아님! */
+};
 
 /* initd와 다른 프로세스를 위한 일반 프로세스 초기화기. */
 static void
@@ -276,7 +289,7 @@ process_exec (void *f_name)
 	NOT_REACHED ();
 }
 
-/* TID 스레드가 종료될 때까지 기다렸다가 종료 상태를 반환합니다.  커널에 의해 종료되었다면(즉, 예외로 인해 강제 종료되었다면)
+/* TID 스레드가 종료될 때까지 기다렸다가 종료 상태를 반환합니다. 커널에 의해 종료되었다면(즉, 예외로 인해 강제 종료되었다면)
  * -1을 반환합니다.  TID가 유효하지 않거나 호출한 프로세스의 자식이 아니거나, 해당 TID에 대해 process_wait()가 이미
  * 성공적으로 호출되었다면, 기다리지 않고 즉시 -1을 반환합니다.
  * 
@@ -287,6 +300,19 @@ process_wait (tid_t child_tid UNUSED)
 	/* XXX: 힌트) pintos는 process_wait (initd)에서 종료합니다. process_wait를 구현하기 전에
 	 * XXX:       여기서 무한 루프를 추가하는 것을 권장합니다. */
 	/* 현재는 임시적으로 구현 */
+
+	/* 이 함수가 호출 되었을 때 자식 프로세스가 살아있다면 부모 프로세스는 왜 잠들어야할까?
+	 * child가 수정할 수 있는 record(공유 자료)를 parent가 접근하면 안되기도 하고, busy wait을 하자니
+	 */
+	/* thread_current ()->children 배열 순회 하면서 thread_current ()->children->tid == child_tid 면 그게 우리가 찾는 자식 스레드*/
+	struct thread *curr = thread_current ();
+
+	struct list_elem *e = list_begin (&curr->children);
+
+	while (e != list_end (&curr->children)) {
+		if e->
+	}
+
 
 	int cnt = 0;
 
@@ -307,12 +333,15 @@ process_exit (void)
 	 * TODO: project2/process_termination.html).
 	 * TODO: 여기서 프로세스 자원 정리를 구현하는 것을 권장합니다. */
 
-	/* 유저 프로세스의 thread라면 종료 메시지 출력, pure kernel thread면 메시지 출력 X */
+	/* 유저 프로세스의 thread라면 종료 메시지 출력, pure kernel thread면 메시지 출력 X 
+	 * 유저 프로세스라면 pml4(페이지 테이블)가 존재한다.
+	*/
 	if (curr->pml4 != NULL) {
 		printf ("%s: exit(%d)\n", thread_name (), curr->exit_status);
 	}
 	
-
+	// curr->child_status->exit_status = True
+	sema_up(curr->child_status->wait_sema);
 	process_cleanup ();
 }
 

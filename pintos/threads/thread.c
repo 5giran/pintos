@@ -577,7 +577,12 @@ init_thread(struct thread *t, const char *name, int priority)
 
 	#ifdef USERPROG
 	/* 새 스레드의 default exit_status는 -1 이다.*/
-	t->exit_status = -1;										
+	t->exit_status = -1;
+	/* 새 스레드의 children list initialization */
+	list_init(&t->children);
+	/* 새 스레드의 child_status initialization */
+	t->child_status = NULL;
+
 	#endif
 
 	t->magic = THREAD_MAGIC;

@@ -4,7 +4,7 @@
 
 이 문서는 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox`를 구현하면서 헷갈렸던 지점을 누적해서 정리한다.
 
-현재는 `exit` 기본 구현과 관련된 질문만 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
+현재는 `exit` 기본 구현과 parent-child status record 설계 초안에서 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
 
 ## 1. user program의 `exit(57)`은 어떻게 `syscall_handler()`로 들어오는가
 
@@ -150,7 +150,259 @@ curr->pml4 == NULL
 
 이 조건은 현재 기본 구현에서 쓰는 실용적인 기준이다. 나중에 process 상태가 더 복잡해지면 별도 flag나 child status 구조와 함께 조정할 수 있다.
 
-## 7. 현재 단계에서 기억할 것
+## 7. parent-child 관계는 `fork()`에서만 생기는가
+
+항상 `fork()`에서만 생기는 것은 아니다.
+
+`fork()`에서는 user process가 다른 user process를 만든다.
+
+```text
+user process parent
+  fork()
+  user process child 생성
+  wait(child_tid)
+```
+
+하지만 첫 user process는 kernel 쪽에서 만들어진다.
+
+```text
+kernel main/init thread
+  process_create_initd("args-single ...")
+  initd user process thread 생성
+  process_wait(initd_tid)
+```
+
+이 경우 parent는 user process가 아니라 PintOS 내부 kernel thread다. 그래도 "child를 만들고, 나중에 그 child의 종료를 기다린다"는 점은 같다.
+
+따라서 child status record는 `fork()` 전용 자료구조가 아니다. `process_create_initd()`와 `process_fork()`처럼 wait 가능한 child를 만드는 경로에서 필요하다.
+
+`exec()`는 child를 새로 만들지 않는다. 현재 process의 프로그램 이미지만 바꾸므로 parent-child record를 새로 만들지 않는다.
+
+## 8. `struct thread`에는 무엇을 넣고, record는 어디에 두는가
+
+`child_status` record 자체를 `struct thread` 안에 통째로 넣는 방식은 위험하다. child thread가 종료되면 `struct thread`도 사라질 수 있는데, parent가 나중에 `wait()`으로 status를 읽어야 할 수 있기 때문이다.
+
+그래서 구조는 다음처럼 나눈다.
+
+```text
+struct thread
+  children
+    내가 만든 direct child들의 child_status record 목록
+
+  child_status
+    내가 parent에게 보고할 때 사용할 내 record pointer
+
+struct child_status
+  process.c에서 별도 구조체로 관리
+```
+
+즉 `struct thread`에는 record를 찾기 위한 list와 pointer만 두고, record 자체는 parent thread와 child thread의 수명에 묶이지 않도록 별도 kernel memory로 관리한다.
+
+## 9. `waited`는 현재 wait 중이라는 뜻인가
+
+`waited` 또는 현재 코드 초안의 `is_parent_wait`는 "현재 wait 중인가"만 뜻하지 않는다.
+
+더 정확한 의미는 다음이다.
+
+```text
+parent가 이 child에 대한 wait 권한을 이미 사용했는가
+```
+
+한 child는 정확히 한 번만 wait으로 회수할 수 있다.
+
+```text
+wait(child_tid)
+  첫 번째 호출은 정상 회수 또는 대기 시작
+
+wait(child_tid)
+  두 번째 호출은 -1
+```
+
+따라서 `is_parent_wait == true`는 두 상태를 모두 포함한다.
+
+```text
+child가 이미 죽어 있었고 parent가 status를 회수함
+child가 아직 살아 있어서 parent가 wait에 들어갔고 회수 예정임
+```
+
+둘 다 같은 child에 대해 다시 wait하면 안 되는 상태다.
+
+## 10. `child_status.elem`은 semaphore waiters용인가
+
+아니다.
+
+`child_status.elem`은 parent의 `children` list에 record를 매달기 위한 list element다.
+
+```text
+parent->children
+  child_status A의 elem
+  child_status B의 elem
+  child_status C의 elem
+```
+
+반면 parent가 `sema_down(&child_status->wait_sema)`으로 잠들 때 semaphore waiters list에 들어가는 것은 parent thread의 `thread.elem`이다.
+
+```text
+child_status.elem
+  parent->children list용
+
+thread.elem
+  ready_list, semaphore waiters 같은 thread 상태 list용
+```
+
+ready 상태와 semaphore block 상태는 동시에 일어나지 않으므로 PintOS는 `thread.elem`을 ready list와 semaphore waiters에 번갈아 쓴다. 하지만 parent의 `children` list는 thread 상태 list가 아니라 child status record들을 보관하는 list다. 그래서 별도의 `child_status.elem`이 필요하다.
+
+## 11. 이 맥락의 semaphore는 lock과 같은 동기화인가
+
+일반적으로 동기화는 두 용도로 쓰인다.
+
+```text
+1. 공유 자료를 동시에 건드리지 못하게 막는다.
+2. 어떤 일이 일어날 때까지 기다리게 한다.
+```
+
+`wait_sema`는 주로 두 번째 용도다.
+
+parent가 `wait()`을 호출했는데 child가 아직 살아 있으면 parent는 exit status를 읽을 수 없다. 그래서 parent는 semaphore에서 잠든다. child는 `process_exit()`에서 status를 기록한 뒤 `sema_up()`으로 parent를 깨운다.
+
+```text
+parent
+  child_status->is_child_exit == false
+  sema_down(&child_status->wait_sema)
+
+child
+  child_status->exit_status = status
+  child_status->is_child_exit = true
+  sema_up(&child_status->wait_sema)
+```
+
+그래도 공유 자료가 없는 것은 아니다. parent와 child는 같은 `child_status`를 본다.
+
+```text
+child가 쓰는 값
+  exit_status
+  is_child_exit
+
+parent가 읽고 쓰는 값
+  exit_status
+  is_child_exit
+  is_parent_wait
+```
+
+`wait_sema`는 parent가 child보다 먼저 status를 읽지 않게 순서를 맞춰 주는 장치다.
+
+## 12. record를 thread 안에 두면 왜 위험한가
+
+이 문제는 두 단계로 나누어 봐야 한다.
+
+```text
+1단계
+  record를 어디에 둘 것인가?
+
+2단계
+  별도로 둔 record를 언제 free할 것인가?
+```
+
+먼저 1단계는 record의 위치 문제다. record를 child thread 안에 두면 child가 먼저 죽을 때 위험하다.
+
+```text
+child thread 안에 record를 둠
+
+child
+  exit_status 기록
+  종료
+
+parent
+  나중에 wait()
+  읽을 record가 이미 사라졌을 수 있음
+```
+
+반대로 record를 parent thread 안에 두면 parent가 먼저 죽을 때 위험하다.
+
+```text
+parent thread 안에 record를 둠
+
+parent
+  child를 만들고 wait하지 않음
+  exit
+
+child
+  나중에 exit
+  status를 기록할 record가 이미 사라졌을 수 있음
+```
+
+그래서 record는 parent thread 안에도, child thread 안에도 통째로 두지 않는다. parent/child thread 바깥의 별도 kernel memory에 두고, parent와 child가 pointer로 같은 record를 참조하게 한다.
+
+첫 user process만 생각하면 parent가 항상 기다리는 것처럼 보인다.
+
+```text
+kernel main/init thread
+  process_create_initd(...)
+  process_wait(initd_tid)
+```
+
+하지만 일반 `fork()` 관계에서는 parent가 반드시 wait하지 않는다.
+
+```text
+parent
+  fork()
+  wait하지 않고 exit
+
+child
+  나중에 exit
+```
+
+또 여러 child 중 일부만 wait하고 parent가 종료할 수도 있다. 따라서 "첫 user process는 기다린다"와 "모든 parent가 모든 child를 기다린다"는 다르다.
+
+`fork()` 후 parent가 바로 exit하는 패턴이 항상 좋은 사용법은 아닐 수 있다. 새 child가 필요 없고 현재 process만 새 프로그램으로 바꾸려는 상황이라면 `exec()`가 더 맞다. 하지만 OS는 user program이 그런 패턴을 쓰지 않을 것이라고 가정하면 안 된다.
+
+```text
+fork
+  child를 새로 만든다.
+  parent가 wait하지 않고 먼저 죽을 수 있다.
+
+exec
+  현재 process의 프로그램만 바꾼다.
+  child를 새로 만들지 않는다.
+```
+
+그래서 child status record는 특정 사용 패턴이 바람직한지와 별개로, 가능한 실행 순서를 모두 견디도록 parent/child 바깥의 별도 구조체로 관리해야 한다.
+
+## 13. 별도 record에도 수명 정책이 필요한 이유
+
+record를 별도 구조체로 뺐다고 문제가 끝나는 것은 아니다. 그 다음에는 이 별도 record를 언제 free할지 정해야 한다.
+
+너무 빨리 free하면 다시 dangling pointer가 생긴다.
+
+```text
+child가 exit할 때 바로 free
+  parent가 나중에 wait할 수 없음
+
+parent가 exit할 때 바로 free
+  child가 나중에 exit status를 기록할 수 없음
+```
+
+그래서 별도 record에는 reference count나 orphan 처리 같은 수명 정책이 필요하다.
+
+핵심은 다음이다.
+
+```text
+parent가 더 이상 record를 쓰지 않음
+child가 더 이상 record를 쓰지 않음
+둘 다 확인된 뒤 free
+```
+
+정리하면 흐름은 다음과 같다.
+
+```text
+record를 thread 안에 두면 한쪽 thread 종료에 같이 사라질 수 있다.
+  -> parent/child 바깥의 별도 구조체로 둔다.
+
+별도 구조체도 아무 때나 free하면 한쪽이 아직 쓸 수 있다.
+  -> 수명 정책을 둔다.
+```
+
+## 14. 현재 단계에서 기억할 것
 
 현재 구현은 `exit` 기본 구현일 뿐이고, 3번 담당 전체 구현이 끝난 것이 아니다.
 
@@ -160,4 +412,7 @@ curr->pml4 == NULL
 - `SYS_EXIT`는 status를 저장하고 종료 경로로 들어간다.
 - `process_exit()`은 종료 메시지와 정리 작업을 담당한다.
 - `exit_status`는 나중에 parent-child status 구조로 넘겨 줄 값이다.
+- child status record는 `fork()`뿐 아니라 `process_create_initd()`로 만든 첫 user process에도 필요하다.
+- `wait_sema`는 parent를 재우고 child exit 시 깨우는 event 동기화 장치다.
+- `child_status.elem`은 parent의 `children` list용이고, semaphore waiters용이 아니다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.
