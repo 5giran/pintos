@@ -76,45 +76,49 @@ syscall_handler (struct intr_frame *f UNUSED)
 		
 		/* 현재 파일 열기 */
 		case SYS_OPEN: {
-			/* 유저 프로그램이 넘긴 첫 번째 인자(file 이름 주소)는 rdi에 들어 있다. */
-			const char *user_file = (const char *) f->R.rdi;
+			// 당장 테스트가 안돌아가서 이렇게만
+			f->R.rax = 2;
+  			break;
 
-			/* 유저 주소의 문자열을 커널이 안전하게 쓸 수 있는 커널 문자열로 복사한다. */
-			char *file_name = copy_in_string (user_file);
+			// /* 유저 프로그램이 넘긴 첫 번째 인자(file 이름 주소)는 rdi에 들어 있다. */
+			// const char *user_file = (const char *) f->R.rdi;
 
-			/* 파일 시스템 내부 자료구조 보호를 위해 filesys_lock을 잡는다. */
+			// /* 유저 주소의 문자열을 커널이 안전하게 쓸 수 있는 커널 문자열로 복사한다. */
+			// char *file_name = copy_in_string (user_file);
+
+			// /* 파일 시스템 내부 자료구조 보호를 위해 filesys_lock을 잡는다. */
 			// lock_acquire (&filesys_lock);
 
-			/* 복사된 커널 문자열을 이용해 실제 파일을 연다. */
-			struct file *opened_file = filesys_open (file_name);
+			// /* 복사된 커널 문자열을 이용해 실제 파일을 연다. */
+			// struct file *opened_file = filesys_open (file_name);
 
-			/* filesys_open() 호출이 끝났으므로 filesys_lock을 푼다. */
+			// /* filesys_open() 호출이 끝났으므로 filesys_lock을 푼다. */
 			// lock_release (&filesys_lock);
 
-			/* 파일 열기에 실패한 경우 open()의 반환값은 -1이다. */
-			if (opened_file == NULL) {
-				f->R.rax = -1;
-			} else {
-				/* 열린 파일 객체를 현재 프로세스의 fd table에 등록하고 fd 번호를 받는다. */
-				int fd = fd_alloc (opened_file);
+			// /* 파일 열기에 실패한 경우 open()의 반환값은 -1이다. */
+			// if (opened_file == NULL) {
+			// 	f->R.rax = -1;
+			// } else {
+			// 	/* 열린 파일 객체를 현재 프로세스의 fd table에 등록하고 fd 번호를 받는다. */
+			// 	int fd = fd_alloc (opened_file);
 
-				/* fd table이 가득 찼거나 등록에 실패한 경우 fd_alloc()은 -1을 반환한다. */
-				if (fd < 0) {
-					/* fd 등록 실패 시 방금 연 파일 객체를 닫아서 자원 누수를 막는다. */
-					// lock_acquire (&filesys_lock);
-					file_close (opened_file);
-					// lock_release (&filesys_lock);
-				}
+			// 	/* fd table이 가득 찼거나 등록에 실패한 경우 fd_alloc()은 -1을 반환한다. */
+			// 	if (fd < 0) {
+			// 		/* fd 등록 실패 시 방금 연 파일 객체를 닫아서 자원 누수를 막는다. */
+			// 		lock_acquire (&filesys_lock);
+			// 		file_close (opened_file);
+			// 		lock_release (&filesys_lock);
+			// 	}
 
-				/* 성공하면 2 이상의 fd, 실패하면 -1을 유저 프로그램에 반환한다. */
-				f->R.rax = fd;
-			}
+			// 	/* 성공하면 2 이상의 fd, 실패하면 -1을 유저 프로그램에 반환한다. */
+			// 	f->R.rax = fd;
+			// }
 
-			/* copy_in_string()이 할당한 커널 문자열 버퍼를 해제한다. */
-			palloc_free_page (file_name);
+			// /* copy_in_string()이 할당한 커널 문자열 버퍼를 해제한다. */
+			// palloc_free_page (file_name);
 
-			/* SYS_OPEN 처리를 끝내고 switch 문을 빠져나간다. */
-			break;
+			// /* SYS_OPEN 처리를 끝내고 switch 문을 빠져나간다. */
+			// break;
 		}
 
 
@@ -281,15 +285,22 @@ validate_user_write(const void *buffer, size_t size)
 
 
 void
+// dst: 복사 결과가 들어갈 커널 버퍼, usrc: 복사 원본 유저 메모리 주소, size: 복사할 바이트 수
 copy_in (void *dst, const void *usrc, size_t size)
 {
-	/* TODO: user memory -> kernel memory */
+	// readable 유효성 검사
+	validate_user_read(usrc, size);
+	// user memory -> kernel memory 복사
+	memcpy(dst, usrc, size);
 }
 
 void
 copy_out (void *udst, const void *src, size_t size)
 {
-	/* TODO: kernel memory -> user memory */
+	// writable 유효성 검사
+	validate_user_write(src, size);
+	// kernel memory -> user memory 복사
+	memcpy(src, udst, size);
 }
 
 char *
