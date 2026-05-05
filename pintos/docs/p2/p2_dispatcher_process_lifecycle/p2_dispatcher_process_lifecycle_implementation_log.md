@@ -242,8 +242,9 @@ record 자체는 `process.c`에서 별도 구조체로 두는 방향이다.
 struct child_status
   tid
   exit_status
-  is_child_exit
-  is_parent_wait
+  has_exited
+  has_been_waited
+  ref_cnt
   wait_sema
   elem
 ```
@@ -257,13 +258,17 @@ tid
 exit_status
   child가 종료할 때 남긴 status다.
 
-is_child_exit
+has_exited
   child가 이미 종료했는지 나타낸다.
 
-is_parent_wait
+has_been_waited
   parent가 이 child에 대한 wait 권한을 이미 사용했는지 나타낸다.
   "현재 기다리는 중인가"만 뜻하는 것이 아니라,
   이미 회수했거나 회수 예정이라 다시 wait하면 안 되는 상태를 뜻한다.
+
+ref_cnt
+  parent 몫 1개와 child 몫 1개를 합친 참조 수다.
+  초기값은 2이고, 둘 다 release하면 0이 되어 record를 free한다.
 
 wait_sema
   child가 아직 살아 있을 때 parent를 재워 두는 semaphore다.
@@ -274,7 +279,39 @@ elem
 
 `elem`은 semaphore waiters에 들어가는 element가 아니다. `sema_down()`으로 parent가 잠들 때 semaphore waiters에 들어가는 것은 parent thread의 `thread.elem`이다. `child_status.elem`은 parent의 child record 목록에 들어가기 위한 별도 list element다.
 
-### 3.2. `wait_sema`가 필요한 이유
+### 3.2. `child_status_create()` 구현
+
+`child_status_create(tid)` helper는 child status record 하나를 새로 만들고 기본값을 채우는 함수다. 이 helper는 `process_create_initd()`와 `process_fork()`에서 공통으로 쓰기 위한 것이다.
+
+record는 함수 지역 변수로 만들면 안 된다. `process_create_initd()`나 `process_fork()`가 return한 뒤에도 parent와 child가 같은 record를 계속 참조해야 하기 때문이다. 그래서 `malloc(sizeof *cs)`로 kernel heap에 record를 만든다.
+
+`palloc_get_page()`도 가능은 하지만, `child_status` 하나는 수십 바이트 수준이므로 4KB page 하나를 통째로 쓰기에는 낭비가 크다. 작은 구조체에는 `malloc()`이 더 자연스럽다.
+
+초기값은 다음처럼 잡는다.
+
+```text
+tid
+  인자로 받은 child tid
+
+exit_status
+  아직 child가 status를 남기기 전이므로 -1
+
+has_exited
+  아직 종료 전이므로 false
+
+has_been_waited
+  아직 wait 권한이 사용되지 않았으므로 false
+
+ref_cnt
+  parent 몫 1 + child 몫 1이므로 2
+
+wait_sema
+  parent가 먼저 wait하면 block되어야 하므로 sema_init(..., 0)
+```
+
+`elem`은 따로 초기화하지 않는다. `elem`은 parent의 `children` list에 삽입될 때 `list_push_back()` 같은 list 함수가 `prev`, `next`를 채운다. 아직 list에 들어가지 않은 `elem`을 NULL로 초기화해도 PintOS list API에는 의미가 없다.
+
+### 3.3. `wait_sema`가 필요한 이유
 
 `process_wait(child_tid)`를 호출했을 때 child가 이미 죽어 있으면 parent는 저장된 `exit_status`를 바로 반환하면 된다.
 
@@ -289,13 +326,13 @@ busy wait이 아예 불가능한 것은 아니다. PintOS는 timer interrupt로 
 ```text
 parent
   wait(child_tid)
-  is_child_exit == false
+  has_exited == false
   sema_down(&child_status->wait_sema)
 
 child
   exit(42)
   child_status->exit_status = 42
-  child_status->is_child_exit = true
+  child_status->has_exited = true
   sema_up(&child_status->wait_sema)
 
 parent
@@ -305,7 +342,7 @@ parent
 
 이 semaphore는 lock처럼 공유 자료 접근을 막는 용도라기보다, "child exit가 끝났으니 parent가 계속 진행해도 된다"는 event를 전달하는 용도에 가깝다.
 
-### 3.3. 아직 남은 설계 지점
+### 3.4. 아직 남은 설계 지점
 
 현재 코드 초안에는 record의 수명 정책이 아직 들어가지 않았다. record를 별도 구조체로 두기로 했다면, 다음 단계는 release 정책을 명확히 하는 것이다.
 
@@ -359,12 +396,13 @@ OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라
 
 - `thread.h`에서 `struct child_status *`를 쓰려면 forward declaration이 필요하다.
 - `init_thread()`에서 `children`뿐 아니라 `child_status = NULL`도 초기화해야 한다.
-- `struct child_status`를 만들 때 `wait_sema`는 0으로 초기화해야 한다.
-- record 생성 helper, 검색 helper, release helper를 둘지 결정해야 한다.
+- `child_status_create()`가 실패 시 NULL을 반환하고, 성공 시 만든 record를 반환해야 한다.
+- `child_status_find()`에서 parent의 `children` list를 검색해야 한다.
+- `child_status_release()`에서 ref count를 낮추고 0이면 free해야 한다.
 - `process_create_initd()`와 `process_fork()` 양쪽에서 record를 생성해 parent의 `children`에 등록해야 한다.
 - child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
 - `process_exit()`에서 자기 `child_status`에 exit status를 기록하고 parent를 깨워야 한다.
-- `process_wait()`에서 parent의 `children` list를 검색하고, `is_parent_wait` 규칙을 적용해야 한다.
+- `process_wait()`에서 parent의 `children` list를 검색하고, `has_been_waited` 규칙을 적용해야 한다.
 
 ## 4. 이후 기록 위치
 

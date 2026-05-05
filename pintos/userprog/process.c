@@ -44,6 +44,36 @@ struct child_status {
 	struct semaphore wait_sema;		/* has_exited가 false라면, parent process는 child exit 될 때 까지 이 semaphore에서 sleep */
 	struct list_elem elem;				/* parent->children에 child_status record를 매달기 위한 elem, waiters 안에 들어갈 것이 아님! */
 };
+/* child_status record 하나를 새로 만든다. 
+ * 만들지 못하면 NULL 반환
+ * record 안의 필드들을 기본값으로 채운다.
+ * parent가 기다릴 semaphore를 0으로 초기화
+ * 만든 record 주소를 반환
+ * 이 함수는 process_create_initd()와 process_fork() 에서 사용되는 helper 함수다.
+*/
+static struct child_status *
+child_status_create (tid_t child_tid) {
+	ASSERT(child_tid != TID_ERROR);
+	/* child_status 타입 구조체를 가리키는 포인터 변수인 cs에게 동적으로 메모리를 할당한다.
+	 * 왜 동적 메모리를 할당해줘야하고, 왜 palloc 대신 malloc을 사용할까?
+	 * 동적 메모리 할당 이유: 만약 process_fork()나 process_create_initd() 안의 지역 변수로 선언 하면, 그 함수들이 종료될 때 스택에 올라간 child_status의 메모리도 사라진다.
+	 * 하지만 나중에 child나 parent가 child_status 내부의 값을 변경하고자 접근할 수 있으므로, child_status의 메모리는 함수 종료와 상관 없이 계속 살아있어야 한다. 그래서 kernel heap/page 영역에 만들어야 함.
+	 * palloc 안 쓰는 이유: 이 구조체 하나 만들고자 4KB page 주는건 낭비.
+	*/
+	struct child_status *cs = malloc(sizeof *cs);
+	if (cs == NULL) {
+		return NULL;
+	}
+
+	cs->tid = child_tid;
+	cs->exit_status = -1;
+	cs->has_exited = false;
+	cs->has_been_waited = false;
+	cs->ref_cnt = 2;
+	sema_init(&cs->wait_sema, 0);
+
+	return cs;
+}
 
 /* initd와 다른 프로세스를 위한 일반 프로세스 초기화기. */
 static void
@@ -307,14 +337,6 @@ process_wait (tid_t child_tid UNUSED)
 	/* 이 함수가 호출 되었을 때 자식 프로세스가 살아있다면 부모 프로세스는 왜 잠들어야할까?
 	 * child가 수정할 수 있는 record(공유 자료)를 parent가 접근하면 안되기도 하고, busy wait을 하자니
 	 */
-	/* thread_current ()->children 배열 순회 하면서 thread_current ()->children->tid == child_tid 면 그게 우리가 찾는 자식 스레드*/
-	struct thread *curr = thread_current ();
-
-	struct list_elem *e = list_begin (&curr->children);
-
-	while (e != list_end (&curr->children)) {
-		if e->
-	}
 
 
 	int cnt = 0;
