@@ -193,54 +193,54 @@ struct thread
     내가 parent에게 보고할 때 사용할 내 record pointer
 
 struct child_status
-  process.c에서 별도 구조체로 관리
+  타입 정의는 thread.h에 둔다.
+  record 객체는 process.c에서 child마다 malloc으로 별도 할당한다.
 ```
 
 즉 `struct thread`에는 record를 찾기 위한 list와 pointer만 두고, record 자체는 parent thread와 child thread의 수명에 묶이지 않도록 별도 kernel memory로 관리한다.
 
-### 8.1. forward declaration은 왜 필요한가
+### 8.1. `thread.h`에 구조체 정의를 둬도 되는가
 
-`thread.h`에는 `struct thread`가 있고, 그 안에는 다음 포인터가 들어간다.
-
-```c
-struct child_status *child_status;
-```
-
-이때 `thread.h`는 `struct child_status`의 내부 필드를 알 필요가 없다. 포인터만 저장하면 되기 때문이다. 그래서 `thread.h`에는 실제 정의가 아니라 이름만 알려 주는 선언을 둔다.
+처음에는 `thread.h`에 forward declaration만 두는 방향도 가능했다.
 
 ```c
 struct child_status;
+struct child_status *child_status;
 ```
 
-이것이 forward declaration이다.
+이 방식은 `thread.h`가 record 내부 필드를 몰라도 될 때 쓸 수 있다. 포인터만 저장하려면 `struct child_status`라는 타입 이름만 알아도 충분하기 때문이다.
+
+하지만 지금은 `struct child_status` 타입 정의를 `thread.h`로 옮겼다. 이것도 잘못된 방식이 아니다. 팀원들이 여러 파일에서 같은 child status record 타입을 볼 수 있고, `struct thread`와 밀접한 lifecycle record라는 점이 더 명확해진다.
+
+여기서 헷갈리면 안 되는 구분은 다음이다.
 
 ```text
-thread.h
-  struct child_status라는 타입이 존재한다는 사실만 안다.
-  포인터를 저장할 뿐 내부 필드에는 접근하지 않는다.
+괜찮은 것
+  struct child_status의 타입 정의를 thread.h에 둔다.
+  parent와 child가 record pointer를 공유한다.
+  실제 record 객체는 process.c에서 malloc으로 child마다 만든다.
 
-process.c
-  struct child_status의 실제 필드 정의를 가진다.
-  exit_status, wait_sema 같은 내부 필드에 접근한다.
+위험한 것
+  struct child_status record 객체를 struct thread 안에 값으로 통째로 넣는다.
 ```
+
+문제는 "구조체 정의가 thread.h에 있느냐"가 아니다. 진짜 문제는 record 객체의 수명이 parent thread나 child thread 객체의 수명에 묶이는가다.
+
+```text
+타입 정의 위치
+  컴파일러가 필드 구성을 알 수 있게 하는 위치
+
+객체 저장 위치
+  실제 record 메모리가 어디에 생기고 언제 free되는지의 문제
+```
+
+현재 구조는 타입 정의는 `thread.h`, 객체 생성/해제는 `process.c` helper가 담당하는 형태다.
 
 `thread.h`가 `process.h`를 include할 필요는 없다. 현재 `process.h`는 이미 `thread.h`를 include하므로, 반대로 `thread.h`가 `process.h`를 include하면 header 의존성이 서로 물릴 수 있다.
 
-`process.c`를 include하는 것도 하면 안 된다. `.c` 파일은 include 대상이 아니라 컴파일 대상이다. 공유해야 하는 것은 header에 선언하고, 실제 구현과 내부 구조체 정의는 `.c` 파일에 둔다.
+`process.c`를 include하는 것도 하면 안 된다. `.c` 파일은 include 대상이 아니라 컴파일 대상이다. 공유해야 하는 것은 header에 두고, 실제 함수 구현은 `.c` 파일에 둔다.
 
-가능한 것과 불가능한 것을 나누면 다음과 같다.
-
-```text
-forward declaration만 있어도 가능한 것
-  struct child_status *child_status;
-  t->child_status = NULL;
-
-실제 struct 정의가 있어야 가능한 것
-  struct child_status child_status;
-  t->child_status->exit_status = 42;
-```
-
-따라서 `thread.h`와 `thread.c`에서는 child status pointer를 보관하거나 NULL로 초기화하는 정도만 한다. `child_status` 내부 필드 접근은 실제 정의가 있는 `process.c`에서 한다.
+참고로 `struct child_status` 안에 `struct semaphore wait_sema`를 값으로 넣었기 때문에, `thread.h`에서는 `struct semaphore`의 실제 크기를 알아야 한다. 그래서 `thread.h`가 `threads/synch.h`를 include한다.
 
 ## 9. `waited`는 현재 wait 중이라는 뜻인가
 
@@ -600,7 +600,51 @@ child_status_find(parent, child_tid)
 
 지금 구현은 후자 형태를 사용한다.
 
-## 20. 현재 단계에서 기억할 것
+## 20. `child_status_release()`에서 주의할 점
+
+`child_status_release(cs)`는 record를 무조건 free하는 함수가 아니다. 이 함수는 현재 caller가 들고 있던 참조 하나를 내려놓는다.
+
+```text
+ref_cnt--
+ref_cnt == 0이면 free
+```
+
+처음 구현 방향은 맞았다. 여기에 추가로 필요한 안전장치는 두 가지다.
+
+```text
+cs == NULL이면 바로 return
+  실수로 NULL이 들어와도 panic을 피한다.
+
+ASSERT(cs->ref_cnt > 0)
+  이미 release된 record를 또 release하는 버그를 잡는다.
+```
+
+가장 중요한 사용 규칙은 release 뒤에는 `cs`를 다시 만지면 안 된다는 것이다. release 호출에서 `free(cs)`가 되었을 수 있기 때문이다.
+
+```text
+release 전에 해야 하는 일
+  status 읽기
+  list_remove 하기
+  sema_up 하기
+
+release 후
+  cs 접근 금지
+```
+
+이 helper는 나중에 세 흐름에서 쓰인다.
+
+```text
+child process_exit()
+  child 몫 참조 release
+
+parent process_wait()
+  wait으로 status 회수 후 parent 몫 참조 release
+
+parent process_exit()
+  wait하지 않은 children list를 정리하면서 parent 몫 참조 release
+```
+
+## 21. 현재 단계에서 기억할 것
 
 현재 구현은 `exit` 기본 구현일 뿐이고, 3번 담당 전체 구현이 끝난 것이 아니다.
 
@@ -613,6 +657,6 @@ child_status_find(parent, child_tid)
 - child status record는 `fork()`뿐 아니라 `process_create_initd()`로 만든 첫 user process에도 필요하다.
 - `wait_sema`는 parent를 재우고 child exit 시 깨우는 event 동기화 장치다.
 - `child_status.elem`은 parent의 `children` list용이고, semaphore waiters용이 아니다.
-- `child_status_create()`와 `child_status_find()`의 기본 흐름은 구현했다.
-- 다음은 `child_status_release()`로 ref count 감소와 free 정책을 구현할 차례다.
+- `child_status_create()`, `child_status_find()`, `child_status_release()`의 기본 흐름은 구현했다.
+- 다음은 이 helper들을 `process_create_initd()`, `process_fork()`, `process_wait()`, `process_exit()`에 연결할 차례다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.

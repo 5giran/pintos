@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h" /* child_status 내부의 semaphore 사용을 위해 */
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -24,7 +25,19 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* tid_t의 오류 값. */
 
 #ifdef USERPROG
-struct child_status;
+/* parent와 child가 공유하는 process lifecycle record.
+ * record 객체는 struct thread 안에 값으로 넣지 않고, process.c에서
+ * malloc()으로 별도 할당해 parent/child가 pointer로 공유한다. */
+struct child_status {
+	tid_t tid;                    /* child thread id */
+	int exit_status;              /* child의 종료 status */
+	bool has_exited;              /* child가 이미 종료되었는지 여부 */
+	bool has_been_waited;         /* parent가 wait 권한을 이미 사용했는지 여부 */
+	int ref_cnt;                  /* parent 몫 1 + child 몫 1, 둘 다 release하면 free */
+
+	struct semaphore wait_sema;   /* child exit 전 parent가 wait할 semaphore */
+	struct list_elem elem;        /* parent->children list에 연결할 elem */
+};
 #endif
 
 /* thread priority(스레드 우선순위). */

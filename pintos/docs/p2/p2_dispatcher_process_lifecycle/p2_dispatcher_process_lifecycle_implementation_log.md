@@ -78,7 +78,6 @@ process_exit()
 
 남은 작업은 다음이다.
 
-- `child_status_release()` helper 구현
 - `process_create_initd()`와 `process_fork()`에 child status record 생성/등록 연결
 - `process_wait()` 완성
 - `fork` 성공/실패 동기화
@@ -224,11 +223,20 @@ wait
 
 ### 3.1. 현재 구조체와 thread 필드
 
-현재 코드에서는 `thread.h`에 parent-child 관계를 따라가기 위한 필드를 추가했다.
+현재 코드에서는 `thread.h`에 `struct child_status` 타입 정의와 parent-child 관계를 따라가기 위한 thread 필드를 둔다.
 
 ```c
 #ifdef USERPROG
-struct child_status;
+struct child_status {
+	tid_t tid;
+	int exit_status;
+	bool has_exited;
+	bool has_been_waited;
+	int ref_cnt;
+
+	struct semaphore wait_sema;
+	struct list_elem elem;
+};
 #endif
 
 struct thread {
@@ -242,7 +250,9 @@ struct thread {
 };
 ```
 
-`struct child_status;`는 forward declaration이다. `thread.h`는 `struct child_status *` 포인터만 보관하므로 record 내부 필드를 알 필요가 없다. 실제 record 정의는 `process.c`에 둔다.
+`struct child_status`의 타입 정의를 `thread.h`에 둔 이유는 여러 파일에서 같은 record 타입을 자연스럽게 참조할 수 있게 하기 위해서다. 다른 팀 코드도 `thread.h`에서 이 타입을 볼 가능성이 있으므로, 현재 단계에서는 이 방식이 더 명확하다.
+
+중요한 구분은 `struct child_status`의 **타입 정의 위치**와 record **객체의 저장 위치**는 다르다는 점이다. 타입 정의는 `thread.h`에 있지만, child마다 만들어지는 record 객체는 `struct thread` 안에 값으로 들어가지 않는다. 실제 객체는 `process.c`의 helper가 `malloc()`으로 별도 할당하고, parent와 child는 pointer로 같은 record를 공유한다.
 
 `init_thread()`에서는 새 thread가 parent-child 관계를 가질 준비만 한다.
 
@@ -266,7 +276,7 @@ child_status
 
 이 구조에서 중요한 점은 `child_status record 자체`를 `struct thread` 안에 통째로 넣지 않는다는 것이다. `struct thread`에는 record를 찾아가기 위한 list와 pointer만 둔다.
 
-record 자체는 `process.c`에서 별도 구조체로 정의했다.
+record 타입은 `thread.h`에 정의되어 있지만, record 객체는 `process.c`에서 child마다 별도 할당한다.
 
 ```text
 struct child_status
@@ -398,7 +408,50 @@ child_status_find(...) == NULL
   process_wait()은 -1 반환
 ```
 
-### 3.4. `wait_sema`가 필요한 이유
+### 3.4. `child_status_release()` 구현
+
+`child_status_release(cs)` helper는 caller가 child status record에 대한 자기 몫의 참조를 내려놓을 때 사용한다. parent와 child가 같은 record를 공유하므로, record 생성 시 `ref_cnt`는 2로 시작한다.
+
+현재 구현은 다음 형태다.
+
+```c
+/* child_status record에 대한 참조를 하나 내려놓는다.
+ * ref_cnt가 0이 되면 malloc으로 할당한 record를 free한다. */
+static void
+child_status_release (struct child_status *cs) {
+	if (cs == NULL) {
+		return;
+	}
+	ASSERT(cs->ref_cnt > 0);
+
+	cs->ref_cnt--;
+	if (cs->ref_cnt == 0) {
+		free(cs);
+	}
+}
+```
+
+사용 규칙은 release 전에 필요한 값을 모두 읽거나 처리해야 한다는 것이다. `child_status_release(cs)` 호출 뒤에는 그 호출에서 `free(cs)`가 되었을 수 있으므로 `cs`를 다시 만지면 안 된다.
+
+예를 들어 parent가 wait 결과를 반환할 때는 다음 순서가 되어야 한다.
+
+```text
+status = cs->exit_status
+list_remove(&cs->elem)
+child_status_release(cs)
+return status
+```
+
+child가 exit할 때는 status 기록과 parent wake-up을 먼저 하고 child 몫 참조를 release한다.
+
+```text
+cs->exit_status = current->exit_status
+cs->has_exited = true
+sema_up(&cs->wait_sema)
+child_status_release(cs)
+```
+
+### 3.5. `wait_sema`가 필요한 이유
 
 `process_wait(child_tid)`를 호출했을 때 child가 이미 죽어 있으면 parent는 저장된 `exit_status`를 바로 반환하면 된다.
 
@@ -429,9 +482,9 @@ parent
 
 이 semaphore는 lock처럼 공유 자료 접근을 막는 용도라기보다, "child exit가 끝났으니 parent가 계속 진행해도 된다"는 event를 전달하는 용도에 가깝다.
 
-### 3.5. 아직 남은 설계 지점
+### 3.6. 아직 남은 설계 지점
 
-현재 record에는 `ref_cnt` 필드까지 들어갔다. 다만 `ref_cnt`를 실제로 줄이고 0일 때 `free()`하는 `child_status_release()` helper는 아직 구현 전이다.
+현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 다음 단계는 이 helper들을 실제 process 생성/종료/wait 경로에 연결하는 것이다.
 
 첫 user process 흐름만 보면 이 부분이 헷갈릴 수 있다. PintOS의 첫 user process는 kernel main/init thread가 만들고 `process_wait(initd_tid)`로 기다린다. 그래서 처음에는 "parent는 child를 항상 wait하는 것 아닌가?"라고 생각하기 쉽다.
 
@@ -481,16 +534,15 @@ OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라
 
 현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
-- `thread.h`에 `struct child_status;` forward declaration을 추가했다.
+- `thread.h`에 `struct child_status` 타입 정의를 추가했다.
 - `struct thread`에 `children`, `child_status` 필드를 추가했다.
 - `init_thread()`에서 `children` list와 `child_status = NULL`을 초기화한다.
-- `process.c`에 `struct child_status` 실제 정의를 추가했다.
 - `child_status_create()`에서 record를 `malloc()`으로 만들고 기본값을 초기화한다.
 - `child_status_find()`에서 parent의 `children` list를 검색해 tid에 맞는 record를 찾는다.
+- `child_status_release()`에서 ref count를 낮추고 0이면 free한다.
 
 다음에 이어서 구현할 작업은 다음이다.
 
-- `child_status_release()`에서 ref count를 낮추고 0이면 free해야 한다.
 - `process_create_initd()`와 `process_fork()` 양쪽에서 record를 생성해 parent의 `children`에 등록해야 한다.
 - child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
 - `process_exit()`에서 자기 `child_status`에 exit status를 기록하고 parent를 깨워야 한다.
