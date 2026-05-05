@@ -47,7 +47,7 @@ syscall_init (void)
 /* 주요 system call interface */
 /* 인터럽트나 시스템 콜이 발생했을 때 cpu 레지스터 상태를 저장한 구조체가 intr_frame */
 /* 시스템콜 인자들이 syscall_handler에 일반 함수 인자처럼 들어오는 게 아니라, 
- * f 안에 저장된 레지스터 값으로 들어온다. */
+ * 인터럽트 프레임 f 안에 저장된 레지스터 값으로 들어온다. */
 void
 syscall_handler (struct intr_frame *f UNUSED) 
 {

@@ -43,6 +43,34 @@ user process 하나
 
 사용자 프로그램은 `exit(0)`, `fork("child")`, `exec("child-simple")`처럼 C 함수를 호출하는 것처럼 보인다. 하지만 실제로 커널에 들어올 때는 함수 이름이 전달되지 않는다.
 
+여기서 사용자 프로그램이 호출하는 `exit`, `fork`, `exec`, `wait`은 커널 함수가 아니다. 사용자 프로그램용 라이브러리인 `lib/user/syscall.c`에 있는 wrapper 함수다.
+
+예를 들어 user program이 다음을 호출한다고 하자.
+
+```c
+exit (57);
+```
+
+이 호출은 바로 kernel의 `exit` 로직을 실행하는 것이 아니다. 먼저 user library의 `exit()` wrapper로 들어간다. 그 wrapper는 내부적으로 syscall 번호와 인자를 준비한다.
+
+```text
+exit(57)
+  -> syscall1(SYS_EXIT, 57)
+```
+
+다른 syscall도 같은 구조다.
+
+```text
+fork("child")
+  -> syscall1(SYS_FORK, "child")
+
+exec("child-simple")
+  -> syscall1(SYS_EXEC, "child-simple")
+
+wait(pid)
+  -> syscall1(SYS_WAIT, pid)
+```
+
 커널은 CPU register를 보고 syscall을 구분한다.
 
 ```text
@@ -53,6 +81,41 @@ rdx = 3번째 인자
 r10 = 4번째 인자
 r8  = 5번째 인자
 r9  = 6번째 인자
+```
+
+즉 위의 `exit(57)` 예시에서는 user library wrapper가 대략 다음 상태를 만든 뒤 `syscall` instruction을 실행한다.
+
+```text
+rax = SYS_EXIT
+rdi = 57
+```
+
+`syscall` instruction이 실행되면 CPU가 user mode에서 kernel mode로 넘어간다. PintOS는 부팅 중 `syscall_init()`에서 "syscall instruction이 실행되면 `syscall_entry`로 들어오라"고 CPU에 등록해 둔다.
+
+그 다음 `syscall_entry.S`가 register 상태를 `struct intr_frame` 형태로 정리해서 `syscall_handler()`에 넘긴다.
+
+전체 흐름은 다음처럼 보면 된다.
+
+```text
+user program
+  exit(57), fork(...), exec(...), wait(...) 호출
+
+lib/user/syscall.c
+  syscall 번호와 인자를 register에 넣음
+  syscall instruction 실행
+
+CPU
+  user mode에서 kernel mode로 전환
+  syscall_entry로 점프
+
+userprog/syscall-entry.S
+  register들을 intr_frame에 담음
+  syscall_handler(f) 호출
+
+userprog/syscall.c
+  f->R.rax로 syscall 번호 확인
+  f->R.rdi, f->R.rsi, ...에서 인자 추출
+  실제 kernel 로직 실행
 ```
 
 `syscall_handler()`는 `rax`를 보고 어떤 syscall인지 판단하고, 나머지 register에서 인자를 꺼낸다. 반환값이 필요한 syscall은 결과를 다시 `rax`에 넣어야 한다.
