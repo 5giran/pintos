@@ -19,6 +19,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "../include/threads/synch.h"
+#include "threads/malloc.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -35,10 +36,12 @@ static void __do_fork (void *);
 struct child_status {
 	tid_t tid;										/* child thread id */
 	int exit_status;							/* child thread의 exit_status */
-	bool is_child_exit;						/* child thread가 이미 종료 되었다면 1, 살아있다면 0 */
-	bool is_parent_wait;					/* 이 child thread의 parent가 이 child에 대한 wait 권한을 이미 사용했는지, 한 child에 대한 wait 권한은 일회용임. 1이면 이미 회수했거나 회수 예정이라 다시 wait하면 안 되는 상태 */
+	bool has_exited;							/* child thread가 이미 종료 되었다면 1, 살아있다면 0 */
+	bool has_been_waited;					/* 이 child thread의 parent가 이 child에 대한 wait 권한을 이미 사용했는지, 한 child에 대한 wait 권한은 일회용임. 1이면 이미 회수했거나 회수 예정이라 다시 wait하면 안 되는 상태 */
 
-	struct semaphore wait_sema;		/* is_child_exit이 false라면, parent process는 child exit 될 때 까지 이 semaphore에서 sleep */
+	int ref_cnt;									/* 초기값 2(parent 몫 1 + child 몫 1), 둘 다 release하면 0이 되어 free */
+
+	struct semaphore wait_sema;		/* has_exited가 false라면, parent process는 child exit 될 때 까지 이 semaphore에서 sleep */
 	struct list_elem elem;				/* parent->children에 child_status record를 매달기 위한 elem, waiters 안에 들어갈 것이 아님! */
 };
 

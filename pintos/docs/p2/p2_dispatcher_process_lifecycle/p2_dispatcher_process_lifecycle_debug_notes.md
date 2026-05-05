@@ -198,6 +198,50 @@ struct child_status
 
 즉 `struct thread`에는 record를 찾기 위한 list와 pointer만 두고, record 자체는 parent thread와 child thread의 수명에 묶이지 않도록 별도 kernel memory로 관리한다.
 
+### 8.1. forward declaration은 왜 필요한가
+
+`thread.h`에는 `struct thread`가 있고, 그 안에는 다음 포인터가 들어간다.
+
+```c
+struct child_status *child_status;
+```
+
+이때 `thread.h`는 `struct child_status`의 내부 필드를 알 필요가 없다. 포인터만 저장하면 되기 때문이다. 그래서 `thread.h`에는 실제 정의가 아니라 이름만 알려 주는 선언을 둔다.
+
+```c
+struct child_status;
+```
+
+이것이 forward declaration이다.
+
+```text
+thread.h
+  struct child_status라는 타입이 존재한다는 사실만 안다.
+  포인터를 저장할 뿐 내부 필드에는 접근하지 않는다.
+
+process.c
+  struct child_status의 실제 필드 정의를 가진다.
+  exit_status, wait_sema 같은 내부 필드에 접근한다.
+```
+
+`thread.h`가 `process.h`를 include할 필요는 없다. 현재 `process.h`는 이미 `thread.h`를 include하므로, 반대로 `thread.h`가 `process.h`를 include하면 header 의존성이 서로 물릴 수 있다.
+
+`process.c`를 include하는 것도 하면 안 된다. `.c` 파일은 include 대상이 아니라 컴파일 대상이다. 공유해야 하는 것은 header에 선언하고, 실제 구현과 내부 구조체 정의는 `.c` 파일에 둔다.
+
+가능한 것과 불가능한 것을 나누면 다음과 같다.
+
+```text
+forward declaration만 있어도 가능한 것
+  struct child_status *child_status;
+  t->child_status = NULL;
+
+실제 struct 정의가 있어야 가능한 것
+  struct child_status child_status;
+  t->child_status->exit_status = 42;
+```
+
+따라서 `thread.h`와 `thread.c`에서는 child status pointer를 보관하거나 NULL로 초기화하는 정도만 한다. `child_status` 내부 필드 접근은 실제 정의가 있는 `process.c`에서 한다.
+
 ## 9. `waited`는 현재 wait 중이라는 뜻인가
 
 `waited` 또는 현재 코드 초안의 `is_parent_wait`는 "현재 wait 중인가"만 뜻하지 않는다.
