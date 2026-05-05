@@ -75,6 +75,28 @@ child_status_create (tid_t child_tid) {
 	return cs;
 }
 
+
+/* child_status_find ()
+ * parent->children list에서 tid로 record 찾기
+ * process_wait 에서 사용할 용도
+*/
+static struct child_status *
+child_status_find (struct thread *parent, tid_t child_tid) {
+	/* parent->children list 순회 하면서 parent->children->tid == child_tid 면 그게 우리가 찾는 자식 스레드*/
+
+	struct list_elem *e = list_begin (&parent->children);
+
+	while (e != list_end (&parent->children)) {
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		if (cs->tid == child_tid) {
+			return cs;
+		}
+		e = list_next(e);
+	}
+	/* 못 찾으면 NULL return */
+	return NULL;
+}
+
 /* initd와 다른 프로세스를 위한 일반 프로세스 초기화기. */
 static void
 process_init (void)

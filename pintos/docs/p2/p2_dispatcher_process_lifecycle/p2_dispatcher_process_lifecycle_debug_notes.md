@@ -4,7 +4,7 @@
 
 이 문서는 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox`를 구현하면서 헷갈렸던 지점을 누적해서 정리한다.
 
-현재는 `exit` 기본 구현과 parent-child status record 설계 초안에서 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
+현재는 `exit` 기본 구현과 parent-child status record 초기 helper 구현 중 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
 
 ## 1. user program의 `exit(57)`은 어떻게 `syscall_handler()`로 들어오는가
 
@@ -244,7 +244,7 @@ forward declaration만 있어도 가능한 것
 
 ## 9. `waited`는 현재 wait 중이라는 뜻인가
 
-`waited` 또는 현재 코드 초안의 `has_been_waited`는 "현재 wait 중인가"만 뜻하지 않는다.
+`waited` 또는 현재 코드의 `has_been_waited`는 "현재 wait 중인가"만 뜻하지 않는다.
 
 더 정확한 의미는 다음이다.
 
@@ -555,7 +555,52 @@ struct list_elem
   list에 삽입될 때 list 함수가 연결 정보를 세팅
 ```
 
-## 19. 현재 단계에서 기억할 것
+## 19. `child_status_find()` 구현 중 놓친 부분
+
+처음 구현한 방향은 맞았다. `parent->children` list를 순회하면서 `list_entry()`로 `child_status` record를 꺼내고, `cs->tid == child_tid`이면 그 record를 반환하는 구조였다.
+
+처음 구현의 핵심 흐름은 다음과 같았다.
+
+```c
+struct list_elem *e = list_begin (&parent->children);
+
+while (e != list_end (&parent->children)) {
+  struct child_status *cs = list_entry (e, struct child_status, elem);
+  if (cs->tid == child_tid) {
+    return cs;
+  }
+  e = list_next (e);
+}
+```
+
+여기서 빠진 것은 "못 찾았을 때의 반환값"이었다. 함수 반환 타입이 `struct child_status *`이므로, list 끝까지 순회했는데도 해당 tid를 못 찾으면 명확히 `NULL`을 반환해야 한다.
+
+```c
+return NULL;
+```
+
+이 `NULL`은 `process_wait()`에서 중요한 의미를 가진다.
+
+```text
+child_status_find(parent, child_tid) == NULL
+  현재 thread의 direct child가 아님
+  process_wait()은 -1 반환
+```
+
+또 처음 구상에서는 helper 안에서 `thread_current()`를 직접 사용할 수도 있었다. 하지만 현재 형태처럼 parent를 인자로 받는 편이 더 명확하다.
+
+```text
+child_status_find(child_tid)
+  내부에서 thread_current()를 parent로 사용
+  process_wait() 전용 helper에 가까움
+
+child_status_find(parent, child_tid)
+  어떤 parent의 children list를 검색하는지 호출부에서 명확히 보임
+```
+
+지금 구현은 후자 형태를 사용한다.
+
+## 20. 현재 단계에서 기억할 것
 
 현재 구현은 `exit` 기본 구현일 뿐이고, 3번 담당 전체 구현이 끝난 것이 아니다.
 
@@ -568,4 +613,6 @@ struct list_elem
 - child status record는 `fork()`뿐 아니라 `process_create_initd()`로 만든 첫 user process에도 필요하다.
 - `wait_sema`는 parent를 재우고 child exit 시 깨우는 event 동기화 장치다.
 - `child_status.elem`은 parent의 `children` list용이고, semaphore waiters용이 아니다.
+- `child_status_create()`와 `child_status_find()`의 기본 흐름은 구현했다.
+- 다음은 `child_status_release()`로 ref count 감소와 free 정책을 구현할 차례다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.

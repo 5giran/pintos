@@ -4,7 +4,7 @@
 
 이 문서는 `p2_user_memory_syscall_parallel_work_guide.md`의 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox` 구현 기록을 누적해서 정리하는 문서다.
 
-구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현까지만 기록한다.
+구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현과 parent-child status record의 초기 구조/helper 구현까지 기록한다.
 
 ## 2. Exit 기본 구현
 
@@ -78,7 +78,8 @@ process_exit()
 
 남은 작업은 다음이다.
 
-- parent-child status 구조 설계
+- `child_status_release()` helper 구현
+- `process_create_initd()`와 `process_fork()`에 child status record 생성/등록 연결
 - `process_wait()` 완성
 - `fork` 성공/실패 동기화
 - `exec` 인자 복사와 load 실패 처리 연결
@@ -221,22 +222,51 @@ wait
 
 `exec`는 이 관계를 새로 만들지 않는다. `exec`는 현재 process의 프로그램 이미지를 다른 프로그램으로 교체하는 작업이다. 따라서 parent-child record를 새로 생성하지 않고, 기존 process의 관계와 fd table은 유지된다.
 
-### 3.1. 현재 코드 초안
+### 3.1. 현재 구조체와 thread 필드
 
-현재 코드에서는 `thread.h`에 parent-child 관계를 따라가기 위한 필드를 추가하기 시작했다.
+현재 코드에서는 `thread.h`에 parent-child 관계를 따라가기 위한 필드를 추가했다.
+
+```c
+#ifdef USERPROG
+struct child_status;
+#endif
+
+struct thread {
+#ifdef USERPROG
+	uint64_t *pml4;
+	int exit_status;
+
+	struct list children;
+	struct child_status *child_status;
+#endif
+};
+```
+
+`struct child_status;`는 forward declaration이다. `thread.h`는 `struct child_status *` 포인터만 보관하므로 record 내부 필드를 알 필요가 없다. 실제 record 정의는 `process.c`에 둔다.
+
+`init_thread()`에서는 새 thread가 parent-child 관계를 가질 준비만 한다.
+
+```c
+#ifdef USERPROG
+	t->exit_status = -1;
+	list_init(&t->children);
+	t->child_status = NULL;
+#endif
+```
+
+각 필드의 의미는 다음이다.
 
 ```text
-struct thread
-  children
-    현재 thread가 만든 direct child들의 child status record 목록
+children
+  현재 thread가 만든 direct child들의 child status record 목록이다.
 
-  child_status
-    현재 thread가 자기 parent에게 보고할 때 사용할 자기 record
+child_status
+  현재 thread가 자기 parent에게 보고할 때 사용할 자기 record pointer다.
 ```
 
 이 구조에서 중요한 점은 `child_status record 자체`를 `struct thread` 안에 통째로 넣지 않는다는 것이다. `struct thread`에는 record를 찾아가기 위한 list와 pointer만 둔다.
 
-record 자체는 `process.c`에서 별도 구조체로 두는 방향이다.
+record 자체는 `process.c`에서 별도 구조체로 정의했다.
 
 ```text
 struct child_status
@@ -287,31 +317,88 @@ record는 함수 지역 변수로 만들면 안 된다. `process_create_initd()`
 
 `palloc_get_page()`도 가능은 하지만, `child_status` 하나는 수십 바이트 수준이므로 4KB page 하나를 통째로 쓰기에는 낭비가 크다. 작은 구조체에는 `malloc()`이 더 자연스럽다.
 
-초기값은 다음처럼 잡는다.
+현재 구현은 다음 형태다.
+
+```c
+/* child_status record 하나를 새로 만든다.
+ * process_create_initd()와 process_fork()에서 공통으로 사용한다. */
+static struct child_status *
+child_status_create (tid_t child_tid) {
+	ASSERT(child_tid != TID_ERROR);
+
+	struct child_status *cs = malloc(sizeof *cs);
+	if (cs == NULL) {
+		return NULL;
+	}
+
+	cs->tid = child_tid;
+	cs->exit_status = -1;
+	cs->has_exited = false;
+	cs->has_been_waited = false;
+	cs->ref_cnt = 2;
+	sema_init(&cs->wait_sema, 0);
+
+	return cs;
+}
+```
+
+위 구현에서 각 초기값의 의미는 다음과 같다.
 
 ```text
-tid
-  인자로 받은 child tid
+exit_status = -1
+  아직 child가 status를 남기기 전의 기본값이다.
 
-exit_status
-  아직 child가 status를 남기기 전이므로 -1
+has_exited = false
+  아직 종료 전이다.
 
-has_exited
-  아직 종료 전이므로 false
+has_been_waited = false
+  아직 wait 권한이 사용되지 않았다.
 
-has_been_waited
-  아직 wait 권한이 사용되지 않았으므로 false
+ref_cnt = 2
+  parent 몫 1 + child 몫 1이다.
 
-ref_cnt
-  parent 몫 1 + child 몫 1이므로 2
-
-wait_sema
-  parent가 먼저 wait하면 block되어야 하므로 sema_init(..., 0)
+sema_init(..., 0)
+  parent가 child exit 전에 wait하면 block되어야 한다.
 ```
 
 `elem`은 따로 초기화하지 않는다. `elem`은 parent의 `children` list에 삽입될 때 `list_push_back()` 같은 list 함수가 `prev`, `next`를 채운다. 아직 list에 들어가지 않은 `elem`을 NULL로 초기화해도 PintOS list API에는 의미가 없다.
 
-### 3.3. `wait_sema`가 필요한 이유
+### 3.3. `child_status_find()` 구현
+
+`child_status_find(parent, child_tid)` helper는 parent의 `children` list에서 특정 child tid에 해당하는 record를 찾는다. 주 사용처는 `process_wait(child_tid)`이다.
+
+`children`은 배열이 아니라 PintOS `struct list`다. list 안에는 `struct child_status` 자체가 들어가는 것이 아니라, 각 record 안의 `elem`이 들어간다. 그래서 순회 중에는 `list_entry(e, struct child_status, elem)`로 `struct list_elem *`를 다시 `struct child_status *`로 변환해야 한다.
+
+현재 구현은 다음 형태다.
+
+```c
+/* parent->children list에서 tid로 record를 찾는다.
+ * process_wait()에서 direct child 여부를 확인할 때 사용한다. */
+static struct child_status *
+child_status_find (struct thread *parent, tid_t child_tid) {
+	struct list_elem *e = list_begin (&parent->children);
+
+	while (e != list_end (&parent->children)) {
+		struct child_status *cs = list_entry (e, struct child_status, elem);
+		if (cs->tid == child_tid) {
+			return cs;
+		}
+		e = list_next(e);
+	}
+
+	return NULL;
+}
+```
+
+못 찾았을 때 `NULL`을 반환하는 이유는 `wait()`에서 이 pid가 내 direct child인지 판단해야 하기 때문이다.
+
+```text
+child_status_find(...) == NULL
+  현재 thread의 direct child가 아님
+  process_wait()은 -1 반환
+```
+
+### 3.4. `wait_sema`가 필요한 이유
 
 `process_wait(child_tid)`를 호출했을 때 child가 이미 죽어 있으면 parent는 저장된 `exit_status`를 바로 반환하면 된다.
 
@@ -342,9 +429,9 @@ parent
 
 이 semaphore는 lock처럼 공유 자료 접근을 막는 용도라기보다, "child exit가 끝났으니 parent가 계속 진행해도 된다"는 event를 전달하는 용도에 가깝다.
 
-### 3.4. 아직 남은 설계 지점
+### 3.5. 아직 남은 설계 지점
 
-현재 코드 초안에는 record의 수명 정책이 아직 들어가지 않았다. record를 별도 구조체로 두기로 했다면, 다음 단계는 release 정책을 명확히 하는 것이다.
+현재 record에는 `ref_cnt` 필드까지 들어갔다. 다만 `ref_cnt`를 실제로 줄이고 0일 때 `free()`하는 `child_status_release()` helper는 아직 구현 전이다.
 
 첫 user process 흐름만 보면 이 부분이 헷갈릴 수 있다. PintOS의 첫 user process는 kernel main/init thread가 만들고 `process_wait(initd_tid)`로 기다린다. 그래서 처음에는 "parent는 child를 항상 wait하는 것 아닌가?"라고 생각하기 쉽다.
 
@@ -392,12 +479,17 @@ exec
 
 OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라도 kernel memory가 깨지지 않도록 방어해야 한다. 그래서 child status record를 parent thread나 child thread 내부가 아니라 별도 구조체로 두고, 수명 정책을 따로 가져가야 한다.
 
-또 현재 초안 기준으로 확인해야 할 구현 사항은 다음이다.
+현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
-- `thread.h`에서 `struct child_status *`를 쓰려면 forward declaration이 필요하다.
-- `init_thread()`에서 `children`뿐 아니라 `child_status = NULL`도 초기화해야 한다.
-- `child_status_create()`가 실패 시 NULL을 반환하고, 성공 시 만든 record를 반환해야 한다.
-- `child_status_find()`에서 parent의 `children` list를 검색해야 한다.
+- `thread.h`에 `struct child_status;` forward declaration을 추가했다.
+- `struct thread`에 `children`, `child_status` 필드를 추가했다.
+- `init_thread()`에서 `children` list와 `child_status = NULL`을 초기화한다.
+- `process.c`에 `struct child_status` 실제 정의를 추가했다.
+- `child_status_create()`에서 record를 `malloc()`으로 만들고 기본값을 초기화한다.
+- `child_status_find()`에서 parent의 `children` list를 검색해 tid에 맞는 record를 찾는다.
+
+다음에 이어서 구현할 작업은 다음이다.
+
 - `child_status_release()`에서 ref count를 낮추고 0이면 free해야 한다.
 - `process_create_initd()`와 `process_fork()` 양쪽에서 record를 생성해 parent의 `children`에 등록해야 한다.
 - child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
@@ -415,4 +507,4 @@ OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라
 7. Rox 처리
 ```
 
-각 section은 "이전 구조", "현재 변경", "설계 의도", "남은 한계" 정도만 짧게 기록한다.
+각 section은 실제 구현 코드와 함께 "이전 구조", "현재 변경", "설계 의도", "남은 한계"를 짧게 기록한다.
