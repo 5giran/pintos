@@ -4,7 +4,7 @@
 
 이 문서는 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox`를 구현하면서 헷갈렸던 지점을 누적해서 정리한다.
 
-현재는 `exit` 기본 구현과 parent-child status record 초기 helper 구현 중 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
+현재는 `exit` 기본 구현, parent-child status record 초기 helper 구현, `process_create_initd()` 연결 중 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
 
 ## 1. user program의 `exit(57)`은 어떻게 `syscall_handler()`로 들어오는가
 
@@ -499,7 +499,27 @@ TID_ERROR
   보통 -1
 ```
 
-`thread_create()`가 실패하면 `TID_ERROR`를 반환한다. 따라서 `child_status_create(tid)`는 정상 child tid를 받아야 하므로 `tid == TID_ERROR`인 값으로 record를 만들면 안 된다.
+`thread_create()`가 실패하면 `TID_ERROR`를 반환한다. 처음에는 `child_status_create(tid)`가 정상 child tid를 받아야 한다고 생각했기 때문에 `tid == TID_ERROR`인 값으로 record를 만들면 안 된다고 봤다.
+
+하지만 `process_create_initd()` 연결 중 `thread_create()` 전에 record를 만들어야 한다는 점이 확인되었다. 그래서 현재는 `child_status_create()`가 tid를 인자로 받지 않고, record 생성 직후에는 `cs->tid = TID_ERROR`를 임시값으로 둔다.
+
+```text
+record 생성 직후
+  cs->tid = TID_ERROR
+
+thread_create() 성공 후
+  cs->tid = tid
+```
+
+즉 `TID_ERROR`는 지금 두 맥락에서 쓰인다.
+
+```text
+thread_create() 반환값이 TID_ERROR
+  thread 생성 실패
+
+cs->tid 초기값이 TID_ERROR
+  아직 실제 child tid를 채우기 전의 임시값
+```
 
 `NULL`은 포인터에 쓰는 값이고, `tid`는 정수다. 그래서 `tid`를 검사할 때는 `NULL`이 아니라 `TID_ERROR`와 비교한다.
 
@@ -644,9 +664,257 @@ parent process_exit()
   wait하지 않은 children list를 정리하면서 parent 몫 참조 release
 ```
 
-## 21. 현재 단계에서 기억할 것
+## 21. `thread_create()` 뒤에 `child_status_create(tid)`를 하면 왜 위험한가
 
-현재 구현은 `exit` 기본 구현일 뿐이고, 3번 담당 전체 구현이 끝난 것이 아니다.
+처음 생각한 흐름은 자연스러웠다.
+
+```text
+thread_create()로 child 생성
+tid를 받음
+child_status_create(tid)
+parent->children에 등록
+```
+
+처음 코드도 이 방향에 가까웠다.
+
+```c
+tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
+struct child_status *cs = child_status_create (tid);
+list_push_back (&(parent->children), &(cs->elem));
+```
+
+하지만 `thread_create()`는 child를 ready queue에 넣고 반환한다. 이때 scheduler가 child를 parent보다 먼저 실행할 수 있다. 심하면 parent가 `child_status_create(tid)`를 호출하기 전에 child가 `exit()`까지 갈 수 있다.
+
+```text
+parent
+  thread_create()
+
+scheduler
+  child 먼저 실행
+
+child
+  initd()
+  process_exec()
+  exit()
+  process_exit()
+  curr->child_status가 아직 NULL일 수 있음
+```
+
+그래서 `child_status` record는 `thread_create()` 전에 만들어져 있어야 한다. 문제는 `thread_create()` 전에는 tid를 모른다는 점이다.
+
+이 문제는 `tid`를 record 생성 시점에 반드시 알아야 한다는 생각을 버리면 풀린다.
+
+```text
+child_status_create()
+  cs->tid = TID_ERROR 임시값
+
+thread_create() 성공
+  cs->tid = tid 로 갱신
+```
+
+child가 exit할 때는 `cs->tid`로 record를 찾지 않는다. child는 자기 `thread_current()->child_status` pointer로 record를 직접 접근한다. `cs->tid`는 parent가 나중에 `wait(child_tid)`에서 children list를 검색할 때 필요하다.
+
+따라서 현재 helper는 `tid_t` 인자를 받지 않는다.
+
+```c
+static struct child_status *
+child_status_create (void) {
+	struct child_status *cs = malloc(sizeof *cs);
+	if (cs == NULL) {
+		return NULL;
+	}
+
+	cs->tid = TID_ERROR;
+	...
+	return cs;
+}
+```
+
+## 22. `initd_aux`는 왜 필요한가
+
+기존 `process_create_initd()`는 child에게 `fn_copy` 하나만 넘겼다.
+
+```c
+thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
+```
+
+그래서 기존 `initd()`는 인자를 command line page로 바로 해석했다.
+
+```c
+static void
+initd (void *f_name)
+{
+	process_exec (f_name);
+}
+```
+
+하지만 parent-child record를 연결하려면 child가 시작할 때 두 가지를 알아야 한다.
+
+```text
+fn_copy
+  실행할 command line page
+
+cs
+  parent와 공유할 child status record
+```
+
+`thread_create()`의 aux 인자는 하나뿐이다. 그래서 둘을 한 포인터로 넘기기 위해 작은 상자 구조체를 만든다.
+
+```c
+struct initd_aux {
+	char *fn_copy;
+	struct child_status *cs;
+};
+```
+
+이제 `thread_create()`에는 `fn_copy`가 아니라 `initd_aux`의 주소를 넘긴다.
+
+```c
+thread_create (thread_name, PRI_DEFAULT, initd, ia);
+```
+
+즉 `aux`는 갑자기 나온 개념이 아니라, child에게 넘겨야 할 값이 하나에서 두 개로 늘어서 필요한 전달 상자다.
+
+## 23. `void *aux`로 받으면 `cs`를 어떻게 꺼내는가
+
+`void *`는 "아직 타입을 모르는 포인터"다. 함수 선언은 `void *`로 유지하되, 함수 안에서 실제 타입으로 해석하면 된다.
+
+헷갈렸던 부분은 인자 이름이 `f_name`이어서, `void *`로 받으면 여전히 command line만 들어오는 것처럼 보였다는 점이다. 지금은 `aux` 안에 `struct initd_aux *`가 들어온다.
+
+현재 흐름은 다음과 같다.
+
+```c
+static void
+initd (void *aux)
+{
+	struct initd_aux *ia = aux;
+	char *fn_copy = ia->fn_copy;
+	struct child_status *cs = ia->cs;
+
+	thread_current ()->child_status = cs;
+	process_init();
+	free(ia);
+
+	if (process_exec (fn_copy) < 0)
+		PANIC ("Fail to launch initd\n");
+	NOT_REACHED ();
+}
+```
+
+`free(ia)` 전에 `fn_copy`와 `cs`를 지역 변수로 꺼내 둔다. 여기서 free하는 것은 aux 상자뿐이다.
+
+```text
+free(ia)
+  initd_aux 상자만 해제
+
+fn_copy
+  process_exec(fn_copy)가 나중에 해제
+
+cs
+  parent/child가 공유하는 record이므로 여기서 해제하면 안 됨
+```
+
+## 24. `initd_aux *ia;`만 선언하면 왜 안 되는가
+
+처음에는 다음처럼 포인터 변수만 선언하고 바로 필드를 채우려 했다.
+
+```c
+struct initd_aux *ia;
+ia->fn_copy = fn_copy;
+```
+
+이 코드는 `ia`가 실제 상자를 가리키지 않기 때문에 잘못됐다. 포인터 변수는 주소를 담는 변수일 뿐이고, 그 주소에 실제 `struct initd_aux` 객체가 있어야 `ia->fn_copy`를 쓸 수 있다.
+
+현재는 `malloc(sizeof *ia)`로 aux 상자 메모리를 만든다.
+
+```c
+struct initd_aux *ia = malloc(sizeof *ia);
+if (ia == NULL) {
+	palloc_free_page(fn_copy);
+	return TID_ERROR;
+}
+ia->fn_copy = fn_copy;
+```
+
+이 실수는 `struct child_status *cs = malloc(sizeof *cs)`와 같은 종류다. 포인터를 선언하는 것과, 그 포인터가 가리킬 실제 객체를 만드는 것은 다르다.
+
+## 25. 실패 경로에서 `free(cs)`와 `child_status_release(cs)` 중 무엇을 쓰는가
+
+`thread_create()` 실패 경로에서는 `free(cs)`가 더 자연스럽다.
+
+```c
+tid = thread_create (thread_name, PRI_DEFAULT, initd, ia);
+if (tid == TID_ERROR) {
+	palloc_free_page (fn_copy);
+	free(cs);
+	free(ia);
+	return TID_ERROR;
+}
+```
+
+이 시점에는 child thread가 만들어지지 않았고, parent의 `children` list에도 record가 들어가지 않았다. 즉 parent/child가 record를 공유하는 수명 정책이 아직 시작되지 않았다.
+
+`child_status_release(cs)`는 "parent나 child가 자기 몫 참조 하나를 내려놓는다"는 의미다.
+
+```text
+child_status_release(cs)
+  ref_cnt--
+  ref_cnt == 0이면 free
+```
+
+그런데 생성 직후 `ref_cnt`는 2다. 여기서 release를 한 번만 호출하면 1이 되어 free되지 않는다. 두 번 호출하면 free되기는 하지만, 실제 parent/child 참조가 시작되지도 않았는데 두 몫을 내려놓는 표현이라 의미가 어색하다.
+
+정리하면 다음과 같다.
+
+```text
+thread_create() 전 또는 thread_create() 실패 경로
+  아직 공유 record가 아님
+  free(cs)
+
+thread_create() 성공 후 parent/child가 공유하기 시작한 뒤
+  child_status_release(cs)
+```
+
+`cs == NULL` 실패 경로에서는 `cs` 자체가 없으므로 `cs`를 free하지 않는다. 이미 만든 `fn_copy`, `ia`만 정리한다.
+
+```c
+struct child_status *cs = child_status_create ();
+if (cs == NULL) {
+	palloc_free_page (fn_copy);
+	free(ia);
+	return TID_ERROR;
+}
+```
+
+## 26. `process_create_initd()` 현재 완료 상태
+
+현재 `process_create_initd()` 연결에서 완료된 흐름은 다음이다.
+
+```text
+parent
+  fn_copy 할당
+  initd_aux 할당
+  child_status record 할당
+  thread_create(..., initd, ia)
+  성공 후 cs->tid = tid
+  parent->children에 cs 등록
+  tid 반환
+
+child
+  initd(aux)
+  aux에서 fn_copy, cs를 꺼냄
+  thread_current()->child_status = cs
+  aux 상자 free
+  process_exec(fn_copy)
+```
+
+이 구조 때문에 child가 parent보다 먼저 실행되어도 child는 이미 aux를 통해 `cs`를 받을 수 있다.
+
+아직 남은 연결은 `process_exit()`과 `process_wait()`이다. 지금은 record를 만들고 parent/child가 같은 record를 가리키게 했을 뿐, child가 죽을 때 status를 기록하고 parent가 wait에서 회수하는 흐름은 아직 완성되지 않았다.
+
+## 27. 현재 단계에서 기억할 것
+
+현재 구현은 `exit` 기본 구현과 `process_create_initd()`의 child status 연결까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
 
 지금 이해해야 할 핵심은 다음이다.
 
@@ -658,5 +926,6 @@ parent process_exit()
 - `wait_sema`는 parent를 재우고 child exit 시 깨우는 event 동기화 장치다.
 - `child_status.elem`은 parent의 `children` list용이고, semaphore waiters용이 아니다.
 - `child_status_create()`, `child_status_find()`, `child_status_release()`의 기본 흐름은 구현했다.
-- 다음은 이 helper들을 `process_create_initd()`, `process_fork()`, `process_wait()`, `process_exit()`에 연결할 차례다.
+- `process_create_initd()`는 child status record를 만들고 `initd(aux)`로 child에게 넘기는 흐름까지 연결했다.
+- 다음은 이 helper들을 `process_exit()`, `process_wait()`, `process_fork()`에 연결할 차례다.
 - `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.

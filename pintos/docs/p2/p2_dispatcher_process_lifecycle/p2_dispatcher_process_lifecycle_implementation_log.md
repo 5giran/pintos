@@ -4,7 +4,7 @@
 
 이 문서는 `p2_user_memory_syscall_parallel_work_guide.md`의 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox` 구현 기록을 누적해서 정리하는 문서다.
 
-구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현과 parent-child status record의 초기 구조/helper 구현까지 기록한다.
+구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현, parent-child status record의 초기 구조/helper, `process_create_initd()` 연결까지 기록한다.
 
 ## 2. Exit 기본 구현
 
@@ -78,7 +78,7 @@ process_exit()
 
 남은 작업은 다음이다.
 
-- `process_create_initd()`와 `process_fork()`에 child status record 생성/등록 연결
+- `process_fork()`에 child status record 생성/등록 연결
 - `process_wait()` 완성
 - `fork` 성공/실패 동기화
 - `exec` 인자 복사와 load 실패 처리 연결
@@ -157,6 +157,52 @@ parent thread 안에 record를 둔 경우
   parent가 wait하지 않고 먼저 exit하면 parent thread가 정리될 수 있다.
   child가 나중에 exit status를 기록할 record가 사라졌을 수 있다.
 ```
+
+첫 user process 흐름만 보면 이 부분이 헷갈릴 수 있다. PintOS의 첫 user process는 kernel main/init thread가 만들고 `process_wait(initd_tid)`로 기다린다. 그래서 처음에는 "parent는 child를 항상 wait하는 것 아닌가?"라고 생각하기 쉽다.
+
+하지만 일반적인 `fork()` 관계에서는 parent가 반드시 wait한다는 보장이 없다.
+
+```text
+parent
+  fork()
+  wait하지 않음
+  exit(0)
+
+child
+  계속 실행
+  나중에 exit(42)
+```
+
+또 parent가 child 여러 개를 만든 뒤 일부만 wait하고 종료할 수도 있다.
+
+```text
+parent
+  child_a = fork()
+  child_b = fork()
+  wait(child_a)
+  exit(0)
+
+child_b
+  parent보다 나중에 exit
+```
+
+따라서 "첫 user process의 parent는 기다린다"는 사실과 "모든 parent가 항상 모든 child를 기다린다"는 말은 다르다. `process_wait()`은 가능한 동작이지 강제 동작이 아니다.
+
+`fork()` 후 parent가 바로 exit하는 패턴이 항상 흔하거나 바람직한 사용법은 아닐 수 있다. 어떤 상황에서는 현재 process를 새 프로그램으로 바꾸는 `exec()`가 더 적절하다. 하지만 `fork()`와 `exec()`는 의미가 다르다.
+
+```text
+fork
+  새 child process를 만든다.
+  parent와 child가 동시에 존재할 수 있다.
+  parent가 wait할 수도 있고, 안 할 수도 있다.
+
+exec
+  현재 process의 프로그램 이미지를 교체한다.
+  새 child를 만들지 않는다.
+  parent-child record도 새로 생기지 않는다.
+```
+
+OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라도 kernel memory가 깨지지 않도록 방어해야 한다. 그래서 child status record를 parent thread나 child thread 내부가 아니라 별도 구조체로 두고, 수명 정책을 따로 가져가야 한다.
 
 따라서 record는 parent thread 안에도, child thread 안에도 통째로 넣지 않는다. record는 parent/child thread 바깥의 별도 kernel memory에 두고, parent와 child가 각각 pointer로 같은 record를 참조하게 만든다.
 
@@ -321,11 +367,13 @@ elem
 
 ### 3.2. `child_status_create()` 구현
 
-`child_status_create(tid)` helper는 child status record 하나를 새로 만들고 기본값을 채우는 함수다. 이 helper는 `process_create_initd()`와 `process_fork()`에서 공통으로 쓰기 위한 것이다.
+`child_status_create()` helper는 child status record 하나를 새로 만들고 기본값을 채우는 함수다. 이 helper는 `process_create_initd()`와 `process_fork()`에서 공통으로 쓰기 위한 것이다.
 
 record는 함수 지역 변수로 만들면 안 된다. `process_create_initd()`나 `process_fork()`가 return한 뒤에도 parent와 child가 같은 record를 계속 참조해야 하기 때문이다. 그래서 `malloc(sizeof *cs)`로 kernel heap에 record를 만든다.
 
 `palloc_get_page()`도 가능은 하지만, `child_status` 하나는 수십 바이트 수준이므로 4KB page 하나를 통째로 쓰기에는 낭비가 크다. 작은 구조체에는 `malloc()`이 더 자연스럽다.
+
+처음에는 `child_status_create(tid)` 형태로 만들었지만, `process_create_initd()` 연결 중 `thread_create()`가 return하기 전에 child가 먼저 실행될 수 있다는 문제가 확인됐다. 그래서 record는 `thread_create()` 전에 만들고, `tid`는 `thread_create()` 성공 후 채우는 구조로 바꿨다.
 
 현재 구현은 다음 형태다.
 
@@ -333,15 +381,13 @@ record는 함수 지역 변수로 만들면 안 된다. `process_create_initd()`
 /* child_status record 하나를 새로 만든다.
  * process_create_initd()와 process_fork()에서 공통으로 사용한다. */
 static struct child_status *
-child_status_create (tid_t child_tid) {
-	ASSERT(child_tid != TID_ERROR);
-
+child_status_create (void) {
 	struct child_status *cs = malloc(sizeof *cs);
 	if (cs == NULL) {
 		return NULL;
 	}
 
-	cs->tid = child_tid;
+	cs->tid = TID_ERROR;
 	cs->exit_status = -1;
 	cs->has_exited = false;
 	cs->has_been_waited = false;
@@ -355,6 +401,10 @@ child_status_create (tid_t child_tid) {
 위 구현에서 각 초기값의 의미는 다음과 같다.
 
 ```text
+tid = TID_ERROR
+  아직 thread_create() 성공 전이라 실제 child tid를 모른다.
+  thread_create() 성공 후 cs->tid = tid로 채운다.
+
 exit_status = -1
   아직 child가 status를 남기기 전의 기본값이다.
 
@@ -482,81 +532,136 @@ parent
 
 이 semaphore는 lock처럼 공유 자료 접근을 막는 용도라기보다, "child exit가 끝났으니 parent가 계속 진행해도 된다"는 event를 전달하는 용도에 가깝다.
 
-### 3.6. 아직 남은 설계 지점
+## 4. `process_create_initd()` child status 연결
 
-현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 다음 단계는 이 helper들을 실제 process 생성/종료/wait 경로에 연결하는 것이다.
+`process_create_initd()`는 PintOS가 첫 user process를 만들 때 호출되는 경로다. 이 child도 나중에 `process_wait(initd_tid)`의 대상이 되므로 parent-child status record를 생성해야 한다.
 
-첫 user process 흐름만 보면 이 부분이 헷갈릴 수 있다. PintOS의 첫 user process는 kernel main/init thread가 만들고 `process_wait(initd_tid)`로 기다린다. 그래서 처음에는 "parent는 child를 항상 wait하는 것 아닌가?"라고 생각하기 쉽다.
-
-하지만 일반적인 `fork()` 관계에서는 parent가 반드시 wait한다는 보장이 없다.
+처음에는 `thread_create()`로 tid를 받은 뒤 `child_status_create(tid)`를 호출하는 흐름을 생각했다.
 
 ```text
-parent
-  fork()
-  wait하지 않음
-  exit(0)
-
-child
-  계속 실행
-  나중에 exit(42)
+thread_create()
+child_status_create(tid)
+parent->children에 등록
 ```
 
-또 parent가 child 여러 개를 만든 뒤 일부만 wait하고 종료할 수도 있다.
+하지만 `thread_create()`는 새 thread를 ready queue에 넣고, 새 thread가 parent보다 먼저 실행될 수 있다. 따라서 child가 먼저 `exit()`에 도달하면 아직 child status record가 연결되지 않은 상태가 된다.
+
+현재 흐름은 다음처럼 바꿨다.
 
 ```text
-parent
-  child_a = fork()
-  child_b = fork()
-  wait(child_a)
-  exit(0)
+fn_copy 할당
+initd_aux 할당
+child_status_create()
+thread_create(..., initd, initd_aux)
+thread_create 성공 후 cs->tid = tid
+parent->children에 cs 등록
 
-child_b
-  parent보다 나중에 exit
+child initd(aux)
+  aux에서 fn_copy, cs를 꺼냄
+  thread_current()->child_status = cs
+  process_exec(fn_copy)
 ```
 
-따라서 "첫 user process의 parent는 기다린다"는 사실과 "모든 parent가 항상 모든 child를 기다린다"는 말은 다르다. `process_wait()`은 가능한 동작이지 강제 동작이 아니다.
+`thread_create()`가 child에게 넘길 수 있는 인자는 `void *aux` 하나뿐이다. 기존에는 이 aux에 `fn_copy`만 넘겼지만, 지금은 child가 command line과 child status record를 둘 다 알아야 한다. 그래서 `initd_aux` 구조체를 추가했다.
 
-`fork()` 후 parent가 바로 exit하는 패턴이 항상 흔하거나 바람직한 사용법은 아닐 수 있다. 어떤 상황에서는 현재 process를 새 프로그램으로 바꾸는 `exec()`가 더 적절하다. 하지만 `fork()`와 `exec()`는 의미가 다르다.
-
-```text
-fork
-  새 child process를 만든다.
-  parent와 child가 동시에 존재할 수 있다.
-  parent가 wait할 수도 있고, 안 할 수도 있다.
-
-exec
-  현재 process의 프로그램 이미지를 교체한다.
-  새 child를 만들지 않는다.
-  parent-child record도 새로 생기지 않는다.
+```c
+struct initd_aux {
+	char *fn_copy;
+	struct child_status *cs;
+};
 ```
 
-OS는 user program이 어떤 순서로 `fork`, `wait`, `exit`을 호출하더라도 kernel memory가 깨지지 않도록 방어해야 한다. 그래서 child status record를 parent thread나 child thread 내부가 아니라 별도 구조체로 두고, 수명 정책을 따로 가져가야 한다.
+`process_create_initd()`에서는 실패할 수 있는 메모리 할당을 `thread_create()` 전에 끝낸다.
+
+```c
+struct initd_aux *ia = malloc(sizeof *ia);
+if (ia == NULL) {
+	palloc_free_page(fn_copy);
+	return TID_ERROR;
+}
+ia->fn_copy = fn_copy;
+
+struct child_status *cs = child_status_create ();
+if (cs == NULL) {
+	palloc_free_page (fn_copy);
+	free(ia);
+	return TID_ERROR;
+}
+ia->cs = cs;
+```
+
+`thread_create()`가 실패하면 아직 child가 존재하지 않고 parent list에도 등록되지 않은 상태다. 이때는 공유 record 수명 정책이 시작되기 전이므로 `cs`를 직접 `free()`한다.
+
+```c
+tid = thread_create (thread_name, PRI_DEFAULT, initd, ia);
+if (tid == TID_ERROR) {
+	palloc_free_page (fn_copy);
+	free(cs);
+	free(ia);
+	return TID_ERROR;
+}
+```
+
+`thread_create()`가 성공하면 그때 실제 tid를 record에 채우고 parent의 `children` list에 등록한다.
+
+```c
+cs->tid = tid;
+list_push_back (&(parent->children), &(cs->elem));
+```
+
+child 쪽 연결은 parent가 child thread 구조체를 찾아서 직접 넣는 방식이 아니다. child가 `initd(aux)`를 시작하면서 aux 상자를 해석하고 자기 thread에 record pointer를 저장한다.
+
+```c
+static void
+initd (void *aux)
+{
+	struct initd_aux *ia = aux;
+	char *fn_copy = ia->fn_copy;
+	struct child_status *cs = ia->cs;
+
+	thread_current ()->child_status = cs;
+	process_init();
+	free(ia);
+
+	if (process_exec (fn_copy) < 0)
+		PANIC ("Fail to launch initd\n");
+	NOT_REACHED ();
+}
+```
+
+이 구조에서는 child가 parent보다 먼저 실행되어도 `cs` 자체는 이미 만들어져 있고 aux로 전달되어 있다. 따라서 child는 `thread_current()->child_status`를 먼저 세팅한 뒤 실행을 계속할 수 있다.
+
+현재 한계는 `process_exit()`과 `process_wait()`이 아직 이 record를 완전히 사용하지 않는다는 점이다. 다음 단계에서 child exit 시 record에 status를 기록하고, parent wait 시 record에서 status를 회수하는 흐름을 연결해야 한다.
+
+## 5. 현재 상태와 이후 기록 위치
+
+현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 또한 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했다. 다음 단계는 이 helper들을 `process_exit()`, `process_wait()`, `process_fork()` 경로에 연결하는 것이다.
 
 현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
 - `thread.h`에 `struct child_status` 타입 정의를 추가했다.
 - `struct thread`에 `children`, `child_status` 필드를 추가했다.
 - `init_thread()`에서 `children` list와 `child_status = NULL`을 초기화한다.
-- `child_status_create()`에서 record를 `malloc()`으로 만들고 기본값을 초기화한다.
+- `child_status_create()`에서 record를 `malloc()`으로 만들고, tid는 임시값 `TID_ERROR`로 초기화한다.
 - `child_status_find()`에서 parent의 `children` list를 검색해 tid에 맞는 record를 찾는다.
 - `child_status_release()`에서 ref count를 낮추고 0이면 free한다.
+- `process_create_initd()`에서 첫 user process용 child status record를 생성하고 parent의 `children` list에 등록한다.
+- `initd()`에서 aux로 전달받은 child status record를 현재 thread의 `child_status`에 연결한다.
 
 다음에 이어서 구현할 작업은 다음이다.
 
-- `process_create_initd()`와 `process_fork()` 양쪽에서 record를 생성해 parent의 `children`에 등록해야 한다.
-- child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
 - `process_exit()`에서 자기 `child_status`에 exit status를 기록하고 parent를 깨워야 한다.
 - `process_wait()`에서 parent의 `children` list를 검색하고, `has_been_waited` 규칙을 적용해야 한다.
-
-## 4. 이후 기록 위치
+- `process_fork()`에서 record를 생성해 parent의 `children`에 등록해야 한다.
+- fork child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
 
 앞으로 구현이 추가되면 이 문서에 다음 section을 이어서 추가한다.
 
 ```text
-4. process_wait()
-5. process_fork()
-6. process_exec()
-7. Rox 처리
+6. process_wait()
+7. process_fork()
+8. process_exec()
+9. Rox 처리
 ```
 
 각 section은 실제 구현 코드와 함께 "이전 구조", "현재 변경", "설계 의도", "남은 한계"를 짧게 기록한다.

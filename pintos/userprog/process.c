@@ -38,8 +38,7 @@ static void __do_fork (void *);
  * 이 함수는 process_create_initd()와 process_fork() 에서 사용되는 helper 함수다.
 */
 static struct child_status *
-child_status_create (tid_t child_tid) {
-	ASSERT(child_tid != TID_ERROR);
+child_status_create (void) {
 	/* child_status 타입 구조체를 가리키는 포인터 변수인 cs에게 동적으로 메모리를 할당한다.
 	 * 왜 동적 메모리를 할당해줘야하고, 왜 palloc 대신 malloc을 사용할까?
 	 * 동적 메모리 할당 이유: 만약 process_fork()나 process_create_initd() 안의 지역 변수로 선언 하면, 그 함수들이 종료될 때 스택에 올라간 child_status의 메모리도 사라진다.
@@ -51,7 +50,7 @@ child_status_create (tid_t child_tid) {
 		return NULL;
 	}
 
-	cs->tid = child_tid;
+	cs->tid = TID_ERROR; /* 처음에는 임시값으로 초기화, thread_create () 성공하면 tid 갱신 */
 	cs->exit_status = -1;
 	cs->has_exited = false;
 	cs->has_been_waited = false;
@@ -60,7 +59,6 @@ child_status_create (tid_t child_tid) {
 
 	return cs;
 }
-
 
 /* child_status_find ()
  * parent->children list에서 tid로 record 찾기
@@ -99,7 +97,13 @@ child_status_release (struct child_status *cs) {
 	}
 }
 
-/* initd와 다른 프로세스를 위한 일반 프로세스 초기화기. */
+/* initd에 넘길, 자식 프로세스가 받아야 하는 aux 인자 묶음 */
+struct initd_aux {
+	char *fn_copy;
+	struct child_status *cs;
+};
+
+/* initd와 다른 프로세스를 위한 일반 프로세스 초기화. */
 static void
 process_init (void)
 {
@@ -127,13 +131,25 @@ process_create_initd (const char *file_name)
 	char thread_name[16];	/* 새 스레드 이름으로 쓸 짧은 버퍼 */
 	size_t name_len;		/* 첫 번째 토큰 길이 계산용 */
 	tid_t tid;				/* 생성된 스레드의 tid를 받을 변수 */
-
+	struct thread *parent = thread_current ();
+	
 	/* 명령줄 전체를 저장할 페이지 하나를 할당한다. */
 	fn_copy = palloc_get_page (0);
 
 	/* 할당 실패 시 프로세스 생성 실패 */
 	if (fn_copy == NULL)
 		return TID_ERROR;
+
+	/* 인자 묶음을 가리키는 포인터 변수 ia의 메모리 동적 할당 */
+	struct initd_aux *ia = malloc(sizeof *ia);
+
+	/* 할당 실패 시 fn_copy page free 후 프로세스 생성 실패 */
+	if (ia == NULL) {
+		palloc_free_page(fn_copy);
+		return TID_ERROR;
+	}
+	/* 성공하면 fn_copy 갱신 */
+	ia->fn_copy = fn_copy;
 
 	/* "args-single one two" 같은 전체 명령줄을 페이지에 복사한다.
 	   이 복사본은 새 thread의 initd()가 받아서 process_exec()에 넘긴다.
@@ -154,6 +170,17 @@ process_create_initd (const char *file_name)
 	/* C 문자열 끝 표시 */
 	thread_name[name_len] = '\0';
 
+	/* child_status를 먼저 생성해줘야함. thread_create이 실행되는 순간 끝까지 실행되고 끝날 수 있기 때문에, 먼저 status setting이 필요 */
+	struct child_status *cs = child_status_create ();
+	/* 할당 실패 시 fn_copy page free 후 프로세스 생성 실패 */
+	if (cs == NULL) {
+		palloc_free_page (fn_copy);
+		free(ia);
+		return TID_ERROR;
+	}
+	/* 성공하면 cs 갱신 */
+	ia->cs = cs;
+
 	/* 새 kernel thread를 만든다.
 	   스레드 이름은 실행 파일 이름만 사용하고,
 		 그 스레드의 시작 함수로 initd를 등록한다. 스레드 실행에 필요한
@@ -161,27 +188,38 @@ process_create_initd (const char *file_name)
 		 새 스레드를 ready queue에 넣는다.
 	   새 thread가 시작되면 kernel_thread()를 거쳐 initd(fn_copy)를 호출한다.
 		 나중에 스케줄러가 이 스레드를 실행시키면 initd(aux)부터 시작하게 해라.*/
-	tid = thread_create (thread_name, PRI_DEFAULT, initd, fn_copy);
-
+	tid = thread_create (thread_name, PRI_DEFAULT, initd, ia); // child_status 연결은 initd(aux)에서 수행됨
 	/* 스레드 생성 실패 시 아까 잡은 페이지를 반환한다. */
-	if (tid == TID_ERROR)
+	if (tid == TID_ERROR) {
 		palloc_free_page (fn_copy);
-
+		free(cs); // 여기서 child_status_release(cs) 해도 되지만, 아직 공유 record로 등록되기 전이라 free가 자연스러움.
+		free(ia);
+		return TID_ERROR;
+	}
+	/* 성공 했을 경우 */
+	cs->tid = tid;
+	/* 현재 스레드의 children list에 cs->elem 삽입 */
+	list_push_back (&(parent->children), &(cs->elem));
+	
 	/* 새 프로세스의 tid 반환 */
 	return tid;
 }
 
 /* 첫 사용자 프로세스를 시작하는 스레드 함수. */
 static void
-initd (void *f_name)
+initd (void *aux)
 {
 #ifdef VM
 	supplemental_page_table_init (&thread_current()->spt);
 #endif
-
+	struct initd_aux *ia = aux;
+	char *fn_copy = ia->fn_copy;
+	struct child_status *cs = ia->cs;
+	thread_current ()->child_status = cs;
 	process_init();
-
-	if (process_exec (f_name) < 0)
+	free(ia);
+	
+	if (process_exec (fn_copy) < 0)
 		PANIC ("Fail to launch initd\n");
 	NOT_REACHED ();
 }
