@@ -4,7 +4,7 @@
 
 이 문서는 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox`를 구현하면서 헷갈렸던 지점을 누적해서 정리한다.
 
-현재는 `exit` 기본 구현, parent-child status record 초기 helper 구현, `process_create_initd()` 연결 중 나온 질문을 정리한다. 이후 `wait`, `fork`, `exec`, `rox` 구현 중 나온 질문은 이 문서에 section을 추가한다.
+현재는 `exit` 기본 구현, parent-child status record 초기 helper, `process_create_initd()`, `process_exit()`, `process_wait()`, ROX 구현 중 나온 질문을 정리한다. 이후 `fork`, `exec` syscall 경로 점검 중 나온 질문은 이 문서에 section을 추가한다.
 
 ## 1. user program의 `exit(57)`은 어떻게 `syscall_handler()`로 들어오는가
 
@@ -910,7 +910,7 @@ child
 
 이 구조 때문에 child가 parent보다 먼저 실행되어도 child는 이미 aux를 통해 `cs`를 받을 수 있다.
 
-아직 남은 큰 연결은 `process_wait()`이다. 지금은 record를 만들고 parent/child가 같은 record를 가리키게 했고, child가 죽을 때 `process_exit()`에서 status를 기록하는 흐름까지 연결했다. parent가 wait에서 status를 회수하는 흐름은 아직 완성되지 않았다.
+이후 `process_exit()`에서 child가 status를 기록하고, `process_wait()`에서 parent가 status를 회수하는 흐름까지 연결했다. 같은 child status record 구조를 `process_fork()`에도 연결해야 한다.
 
 ## 27. `curr->child_status = NULL`을 `child_status_release()` 안에 넣으면 안 되는 이유
 
@@ -1071,9 +1071,83 @@ process_wait() 반환값
 
 즉 `process_wait()`은 기다리는 함수이면서, child의 종료 결과와 record를 회수하는 함수다.
 
-## 30. 현재 단계에서 기억할 것
+## 30. ROX에서 실행 파일을 왜 닫지 않고 들고 있어야 하는가
 
-현재 구현은 `exit` 기본 구현, `process_create_initd()`의 child status 연결, `process_exit()`의 child status 기록과 children 정리까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
+ROX는 실행 중인 executable file에 write를 막는 기능이다.
+
+처음에는 `load()`에서 실행 파일을 다 읽었으니 바로 닫아도 된다고 생각하기 쉽다.
+
+```text
+filesys_open(file_name)
+ELF header 읽음
+segment load
+file_close(file)
+```
+
+하지만 이렇게 닫아 버리면 process가 살아 있는 동안 "이 파일은 실행 중이므로 write 금지"라는 상태를 유지할 file object가 사라진다.
+
+ROX에서는 성공적으로 load한 file에 write deny를 걸고, 현재 thread가 그 file pointer를 들고 있어야 한다.
+
+```text
+load 성공
+  file_deny_write(file)
+  thread_current()->running_file = file
+  file_close(file)는 하지 않음
+
+process cleanup
+  file_close(running_file)
+  running_file = NULL
+```
+
+즉 성공 경로와 실패 경로가 달라진다.
+
+```text
+load 실패
+  실행하지 않을 파일이므로 file_close(file)
+
+load 성공
+  실행 중인 파일이므로 close하지 않고 running_file에 보관
+```
+
+`thread.h`에는 `struct file *running_file`만 저장하므로 `struct file;` forward declaration이면 충분하다. `struct file`의 내부 필드를 직접 보지 않고 포인터만 저장하기 때문이다.
+
+## 31. `file_close()`는 `file_allow_write()`까지 호출한다
+
+현재 PintOS의 `file_close()` 구현은 내부에서 `file_allow_write(file)`를 호출한다.
+
+```c
+void
+file_close (struct file *file) {
+	if (file != NULL) {
+		file_allow_write (file);
+		inode_close (file->inode);
+		free (file);
+	}
+}
+```
+
+따라서 cleanup에서 다음처럼 쓰면 된다.
+
+```c
+if (curr->running_file != NULL) {
+	file_close (curr->running_file);
+	curr->running_file = NULL;
+}
+```
+
+`file_allow_write(curr->running_file)`를 명시적으로 먼저 호출해도 큰 문제는 없지만 중복이다. `file_allow_write()`는 이미 허용 상태이면 별일을 하지 않도록 되어 있지만, 현재 구현에서는 `file_close()`에 맡기는 쪽이 더 단순하다.
+
+실패 경로에서도 `file_close(file)` 전에 `file != NULL` 확인이 필요하다. `filesys_open()`이 실패하면 file은 NULL일 수 있기 때문이다.
+
+```c
+if (file != NULL) {
+	file_close (file);
+}
+```
+
+## 32. 현재 단계에서 기억할 것
+
+현재 구현은 `exit` 기본 구현, `process_create_initd()`의 child status 연결, `process_exit()`의 child status 기록과 children 정리, `process_wait()`의 status 회수, ROX 기본 처리까지 진행된 상태이고, 3번 담당 전체 구현이 끝난 것은 아니다.
 
 지금 이해해야 할 핵심은 다음이다.
 
@@ -1088,5 +1162,7 @@ process_wait() 반환값
 - `process_create_initd()`는 child status record를 만들고 `initd(aux)`로 child에게 넘기는 흐름까지 연결했다.
 - `process_exit()`은 child로서 status를 기록하고, parent로서 wait하지 않은 children record를 release한다.
 - `process_wait()`은 child의 종료 상태를 반환해야 하며, parent 자신의 `exit_status`를 덮어쓰면 안 된다.
-- 다음은 이 helper들을 `process_wait()`, `process_fork()`에 연결할 차례다.
-- `wait`, `fork`, `exec`, `rox` 구현이 들어오면 이 문서에 이어서 기록한다.
+- `process_wait()`은 wait한 child record를 parent의 `children` list에서 제거하고 parent 몫 참조를 release한다.
+- ROX에서는 load 성공 시 실행 파일을 닫지 않고 `running_file`에 보관해야 write deny가 유지된다.
+- 다음은 이 helper들을 `process_fork()`에 연결할 차례다.
+- `fork`, `exec` syscall 경로 점검이 들어오면 이 문서에 이어서 기록한다.

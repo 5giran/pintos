@@ -467,6 +467,10 @@ static void
 process_cleanup (void)
 {
 	struct thread *curr = thread_current ();
+	if (curr->running_file != NULL) {
+		file_close (curr->running_file); // 내부에서 file_allow_write() 호출
+		curr->running_file = NULL;
+	}
 
 #ifdef VM
 	supplemental_page_table_kill (&curr->spt);
@@ -810,13 +814,23 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	if_->R.rsi = (uint64_t) argv_addr;
 
 	success = true;
+	file_deny_write (file);
+	t->running_file = file;
 
-done:
-	/* 로드가 성공하든 실패하든 여기로 옵니다. */
 	if (arg_addr != NULL) {
 		palloc_free_page (arg_addr);
 	}
-	file_close (file);
+
+	return success;
+
+done:
+	/* 로드가 실패하면 여기로 옵니다. */
+	if (arg_addr != NULL) {
+		palloc_free_page (arg_addr);
+	}
+	if (file != NULL) {
+		file_close (file);
+	}
 
 	/* 최종 성공 여부 반환 */
 	return success;

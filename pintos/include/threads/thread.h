@@ -38,6 +38,8 @@ struct child_status {
 	struct semaphore wait_sema;   /* child exit 전 parent가 wait할 semaphore */
 	struct list_elem elem;        /* parent->children list에 연결할 elem */
 };
+
+struct file;
 #endif
 
 /* thread priority(스레드 우선순위). */
@@ -123,6 +125,8 @@ struct thread {
 
 	struct list children;								/* 현재 thread가 생성한 direct child들의 child status record 목록 (요소 자체가 child_status) */
 	struct child_status *child_status;  /* 현재 thread의 parent에게 넘길 현재 thread의 record */
+
+	struct file *running_file;					/* 현재 thread가 load 하고 실행하고 있는 file */
 #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */
