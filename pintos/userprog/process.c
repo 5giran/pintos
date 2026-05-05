@@ -97,6 +97,22 @@ child_status_find (struct thread *parent, tid_t child_tid) {
 	return NULL;
 }
 
+/* child_status_release () */
+static void
+child_status_release (struct child_status *cs) {
+	/* record가 NULL이면 이미 메모리 해제된 것이므로 바로 return */
+	if (cs == NULL) {
+		return;
+	}
+	ASSERT(cs->ref_cnt > 0);
+	/* 이 record의 참조 수를 1 감소시킨다. */
+	cs->ref_cnt--;
+	/* ref_cnt가 0이면 malloc으로 할당 받았던 record의 memory를 free */
+	if (cs->ref_cnt == 0) {
+		free(cs);
+	}
+}
+
 /* initd와 다른 프로세스를 위한 일반 프로세스 초기화기. */
 static void
 process_init (void)
