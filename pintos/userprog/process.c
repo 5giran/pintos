@@ -35,7 +35,8 @@ static void __do_fork (void *);
 static void
 process_init (void)
 {
-	struct thread *current = thread_current();
+	struct thread *current = thread_current ();
+	fd_init (current);
 }
 
 /* FILE_NAME command line으로 첫 user process를 시작할 kernel thread를 만든다.
@@ -299,7 +300,15 @@ process_exit (void)
 	 * TODO: 프로세스 종료 메시지를 구현하세요(참고:
 	 * TODO: project2/process_termination.html).
 	 * TODO: 여기서 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	if (curr->running_file != NULL) {
+		lock_acquire (&filesys_lock);
+		file_allow_write (curr->running_file);
+		file_close (curr->running_file);
+		lock_release (&filesys_lock);
+		curr->running_file = NULL;
+	}
 
+	fd_close_all ();
 	process_cleanup ();
 }
 
@@ -432,13 +441,16 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	process_activate (thread_current ());
 
 	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
+	lock_acquire (&filesys_lock);
 	file = filesys_open (file_name);
+	lock_release (&filesys_lock);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", argv_tokens[0]);
 		goto done;
 	}
 
 	/* ELF(실행 파일) 헤더를 읽고, 진짜 실행 가능한 ELF 파일인지 검증 */
+	lock_acquire (&filesys_lock);
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -446,10 +458,11 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
+		lock_release (&filesys_lock);
 		printf ("load: %s: error loading executable\n", argv_tokens[0]);
 		goto done;
 	}
-
+	lock_release (&filesys_lock);
 	/* 프로그램 헤더를 순회하며 읽습니다.
 		 ELF 안에 있는 "어느 부분을 메모리에 올릴지" 설명서를 하나씩 읽는 것
 	*/
@@ -464,12 +477,15 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			goto done;
 
 		/* 해당 위치로 이동 */
+		lock_acquire (&filesys_lock);
 		file_seek (file, file_ofs);
 
 		/* 프로그램 헤더 1개 읽기 */
-		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr) {
+			lock_release (&filesys_lock);
 			goto done;
-
+		}
+		lock_release (&filesys_lock);
 		/* 다음 헤더 위치로 이동 */
 		file_ofs += sizeof phdr;
 
@@ -602,12 +618,25 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 	success = true;
 
+	if (success) {
+		lock_acquire (&filesys_lock);
+		file_deny_write (file);
+		lock_release (&filesys_lock);
+		t->running_file = file;
+		file = NULL;
+	}
+	
 done:
 	/* 로드가 성공하든 실패하든 여기로 옵니다. */
 	if (arg_addr != NULL) {
 		palloc_free_page (arg_addr);
 	}
-	file_close (file);
+	if (file != NULL) {
+		lock_acquire (&filesys_lock);
+		file_close (file);
+		lock_release (&filesys_lock);
+	}
+	
 
 	/* 최종 성공 여부 반환 */
 	return success;
