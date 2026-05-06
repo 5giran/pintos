@@ -30,6 +30,14 @@ static bool load (const char *file_name, struct intr_frame *if_, int argc, char 
 static void initd (void *f_name);
 static void __do_fork (void *);
 
+struct fork_aux {
+	struct thread *parent;
+	struct child_status *cs;
+	struct intr_frame if_;
+	struct semaphore sema;
+	bool success;
+};
+
 /* child_status record 하나를 새로 만든다. 
  * 만들지 못하면 NULL 반환
  * record 안의 필드들을 기본값으로 채운다.
@@ -108,6 +116,7 @@ static void
 process_init (void)
 {
 	struct thread *current = thread_current();
+	fd_init (thread_current ());
 }
 
 /* FILE_NAME command line으로 첫 user process를 시작할 kernel thread를 만든다.
@@ -226,11 +235,54 @@ initd (void *aux)
 
 /* 현재 프로세스를 `name`으로 복제한다. 새 프로세스의 thread id를 반환하며, 스레드를 생성할 수 없으면 TID_ERROR를
  * 반환한다. */
-tid_t process_fork (const char *name, struct intr_frame *if_ UNUSED)
+tid_t 
+process_fork (const char *name, struct intr_frame *if_)
 {
 	/* 현재 스레드를 새 스레드로 복제한다. */
-	return thread_create (name,
-						 PRI_DEFAULT, __do_fork, thread_current());
+	struct thread *parent = thread_current ();
+	struct child_status *cs = child_status_create ();
+	struct fork_aux *fa;
+	tid_t tid;
+
+	if (cs == NULL)
+		return TID_ERROR;
+
+	list_push_back (&parent->children, &cs->elem);
+
+	fa = malloc (sizeof *fa);
+	if (fa == NULL) {
+		list_remove (&cs->elem);
+		free (cs);
+		return TID_ERROR;
+	}
+
+	fa->parent = parent;
+	fa->cs = cs;
+	fa->if_ = *if_;
+	fa->success = false;
+	sema_init (&fa->sema, 0);
+
+	tid = thread_create (name, PRI_DEFAULT, __do_fork, fa);
+	if (tid == TID_ERROR) {
+		list_remove (&cs->elem);
+		free (cs);
+		free (fa);
+		return TID_ERROR;
+	}
+
+	cs->tid = tid;
+
+	sema_down (&fa->sema);
+
+	if (!fa->success) {
+		list_remove (&cs->elem);
+		child_status_release (cs);
+		free (fa);
+		return TID_ERROR;
+	}
+
+	free (fa);
+	return tid;
 }
 
 #ifndef VM
@@ -244,22 +296,39 @@ duplicate_pte (uint64_t *pte, void *va, void *aux)
 	void *newpage;
 	bool writable;
 
-	/* 1. TODO: parent_page가 kernel page이면 즉시 반환한다. */
-
-	/* 2. 부모의 page map level 4에서 VA를 구한다. */
+	/* 1. TODO: parent_page가 kernel page이면 즉시 반환한다. 
+	 * user address space만 복제함. */
+	if (is_kernel_vaddr (va)) {
+		return true;
+	}
+	/* 2. 부모의 page map level 4에서 VA를 구한다. 
+	 * 만약 부모의 page table에서 va가 가리키는 실제 kernel mapping 주소를 찾는데,
+	 * 없다면..? 부모쪽 매핑 상태가 이상하기에 실패 처리해버림. */
 	parent_page = pml4_get_page(parent->pml4, va);
+	if (parent_page == NULL)
+		return false;
 
 	/* 3. TODO: 자식용 새 PAL_USER page를 할당하고 결과를
-	 * TODO: NEWPAGE로 설정한다. */
-
+	 * TODO: NEWPAGE로 설정한다. 
+	 * 부모 페이지와 독립된 복사본이여야 함. 아니면 실패 처리. */
+	newpage = palloc_get_page (PAL_USER);
+	if (newpage == NULL)
+		return false;
+	
 	/* 4. TODO: 부모의 page를 새 page로 복제하고
 	 * TODO: 부모의 page가 writable인지 확인한다(결과에 따라 WRITABLE을
 	 * TODO: 설정한다). */
+	memcpy (newpage, parent_page, PGSIZE);
+	/* 원래 페이지의 WRITEABLE 비트를 그대로 보존함. */
+	writable = is_writable (pte);
 
-	/* 5. 주소 VA에 WRITABLE 권한으로 새 page를 자식의 page table에 추가한다. */
+	/* 5. 주소 VA에 WRITABLE 권한으로 새 page를 자식의 page table에 추가한다.
+	 * 즉, va->newpage 매핑 설치. */
 	if (!pml4_set_page(current->pml4, va, newpage, writable))
 	{
-		/* 6. TODO: page 삽입에 실패하면 오류 처리를 한다. */
+		/* 6. TODO: page 삽입에 실패하면 새로 할당한 페이지를 반드시 회수해야 하므로 오류 처리를 한다. */
+		palloc_free_page (newpage);
+		return false;
 	}
 	return true;
 }
@@ -271,21 +340,32 @@ duplicate_pte (uint64_t *pte, void *va, void *aux)
 static void
 __do_fork (void *aux)
 {
+	struct fork_aux *fa = aux;
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
+	struct thread *parent = fa->parent;
 	struct thread *current = thread_current ();
 	/* TODO: 어떻게든 parent_if를 전달한다. (즉, process_fork()의 if_) */
-	struct intr_frame *parent_if;
-	bool succ = true;
+	// struct intr_frame *parent_if;
+	// bool succ = true;
 
-	/* 1. CPU context를 local stack에 읽어 온다. */
-	memcpy (&if_, parent_if, sizeof(struct intr_frame));
+	current->child_status = fa->cs;
+	process_init ();
 
-	/* 2. PT를 복제한다 */
+	/* 1. CPU context를 local stack에 읽어 온다. 
+	 * 자식은 fork 직후, 부모와 거의 같은 register state에서 시작해야 함.
+	 * 그래서 부모가 syscall 진입 시에 저장해 둔 intr_frame을 먼저 복사함.
+	 * 나중에 child의 fork 반환값만 0으로 변경해줌. */
+
+	memcpy (&if_, &fa->if_, sizeof if_);
+
+	/* 2. PT를 복제한다 
+	 * child만의 새 페이지 테이블을 만든다.
+	 * 부모의 pml4를 그대로 공유하는 게 아니라,자식 전용 address space를 새로 구성해야 함. */
 	current->pml4 = pml4_create ();
 	if (current->pml4 == NULL)
 		goto error;
 
+	/* 현재 CPU가 자식(child)의 페이지 테이블을 기준으로 동작하라고 함. */
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
@@ -296,19 +376,32 @@ __do_fork (void *aux)
 		goto error;
 #endif
 
+	if (!fd_duplicate_all (current, parent))
+		goto error;
+
+	/* child 입장에서는 fork()의 반환값이 0이어야 한다. */
+	if_.R.rax = 0;
+
+	/* 여기까지 오면 child address space 복제가 끝난 상태란 것.
+	 * 이후 user mode로 복귀하면 parent와 같은 코드 위치에서 실행을 이어간다. */
+	fa->success = true;
+	sema_up (&fa->sema);
+	do_iret (&if_);
+
+error:
+	fa->success = false;
+	sema_up (&fa->sema);
+	thread_exit ();
+}	
+
+
 	/* TODO: 여기에 코드를 작성하세요.
 	 * TODO: 힌트) 파일 객체를 복제하려면 `file_duplicate`를 사용하세요.
 	 * TODO:       include/filesys/file.h에 있습니다. parent는
 	 * TODO:       이 함수가 parent의 자원을 성공적으로 복제할 때까지 fork()에서 반환하면 안 됩니다. */
 
-	process_init ();
-
 	/* 마지막으로, 새로 생성된 프로세스로 전환합니다. */
-	if (succ)
-		do_iret (&if_);
-error:
-	thread_exit ();
-}
+
 
 /* 현재 실행 컨텍스트를 f_name으로 전환합니다.
  * 실패 시 -1을 반환합니다. */

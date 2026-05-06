@@ -99,6 +99,18 @@ syscall_handler (struct intr_frame *f UNUSED)
 			break;
 		}
 
+		case SYS_FORK: {
+			char *thread_name = copy_in_string ((const char *) f->R.rdi);
+			if (thread_name == NULL) {
+				f->R.rax = TID_ERROR;
+				break;
+			}
+
+			f->R.rax = process_fork (thread_name, f);
+			palloc_free_page (thread_name);
+			break;
+		}
+
 		/* 아직 구현 안 한 syscall은 비정상 종료 */
 		default:
 			thread_exit ();
