@@ -10,6 +10,9 @@
 #include "vm/vm.h"
 #endif
 
+struct file;            /* struct file의 전방 선언 */
+
+#define FD_MAX 128		/* 프로세스당 가질 수 있는 최대 파일 디스크립터 개수 */
 
 /* thread 생명 주기의 상태들. */
 enum thread_status {
@@ -127,6 +130,8 @@ struct thread {
 	struct child_status *child_status;  /* 현재 thread의 parent에게 넘길 현재 thread의 record */
 
 	struct file *running_file;					/* 현재 thread가 load 하고 실행하고 있는 file */
+	struct file *fd_table[FD_MAX];     	/* 프로세스별 파일 디스크립터 테이블 */
+	int next_fd;                       	/* 다음 할당 후보 fd */
 #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */

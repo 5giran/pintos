@@ -14,6 +14,8 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "userprog/syscall.h"
+#include "userprog/fd.h"
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
@@ -116,7 +118,7 @@ static void
 process_init (void)
 {
 	struct thread *current = thread_current();
-	fd_init (thread_current ());
+	fd_init (current);
 }
 
 /* FILE_NAME command line으로 첫 user process를 시작할 kernel thread를 만든다.
@@ -529,6 +531,13 @@ process_exit (void)
 	 * TODO: 프로세스 종료 메시지를 구현하세요(참고:
 	 * TODO: project2/process_termination.html).
 	 * TODO: 여기서 프로세스 자원 정리를 구현하는 것을 권장합니다. */
+	if (curr->running_file != NULL) {
+		lock_acquire (&filesys_lock);
+		file_allow_write (curr->running_file);
+		file_close (curr->running_file);
+		lock_release (&filesys_lock);
+		curr->running_file = NULL;
+	}
 
 	/* 유저 프로세스의 thread라면 종료 메시지 출력, pure kernel thread면 메시지 출력 X 
 	 * 유저 프로세스라면 pml4(페이지 테이블)가 존재한다.
@@ -552,6 +561,7 @@ process_exit (void)
 		child_status_release (cs);
 	}
 
+	fd_close_all ();
 	process_cleanup ();
 }
 
@@ -692,7 +702,9 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	process_activate (thread_current ());
 
 	/* 디스크에서 실행할 프로그램 파일을 엽니다. */
-	file = filesys_open (file_name); // pintos file system 내부에서 file_name에 해당하는 실행 파일 찾기
+	lock_acquire (&filesys_lock);
+	file = filesys_open (file_name);
+	lock_release (&filesys_lock);
 	if (file == NULL) {
 		printf ("load: %s: open failed\n", argv_tokens[0]);
 		goto done;
@@ -704,6 +716,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
  	 * "어떤 아키텍처용인지",
  	 * "program header가 어디에 몇 개 있는지" 같은 정보가 들어 있습니다.
 	*/
+	lock_acquire (&filesys_lock);
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
@@ -711,6 +724,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
+		lock_release (&filesys_lock);
 		printf ("load: %s: error loading executable\n", argv_tokens[0]);
 		goto done;
 	}
@@ -725,6 +739,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
  	 * 모든 header가 실제로 메모리에 올라가는 것은 아니고,
  	 * PT_LOAD 타입인 header만 실제 코드/데이터 세그먼트로 메모리에 적재됩니다.
  	 */
+	lock_release (&filesys_lock);
 	file_ofs = ehdr.e_phoff;
 
 	/* 각 프로그램 헤더를 순회하며 메모리에 적재할 세그먼트를 찾는다. */
@@ -736,13 +751,16 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 			goto done;
 
 		/* 현재 program header 위치로 이동합니다. */
+		lock_acquire (&filesys_lock);
 		file_seek (file, file_ofs);
 
 		/* 프로그램 헤더 1개 읽기 */
-		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr) {
+			lock_release (&filesys_lock);
 			goto done;
-
-		/* 현재 program header 위치로 이동합니다. */
+		}
+		lock_release (&filesys_lock);
+		/* 다음 헤더 위치로 이동 */
 		file_ofs += sizeof phdr;
 
 		switch (phdr.p_type) {
@@ -910,20 +928,25 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	file_deny_write (file);
 	t->running_file = file;
 
-	if (arg_addr != NULL) {
-		palloc_free_page (arg_addr);
+	if (success) {
+		lock_acquire (&filesys_lock);
+		file_deny_write (file);
+		lock_release (&filesys_lock);
+		t->running_file = file;
+		file = NULL;
 	}
-
-	return success;
-
+	
 done:
-	/* 로드가 실패하면 여기로 옵니다. */
+	/* 로드가 성공하든 실패하든 여기로 옵니다. */
 	if (arg_addr != NULL) {
 		palloc_free_page (arg_addr);
 	}
 	if (file != NULL) {
+		lock_acquire (&filesys_lock);
 		file_close (file);
+		lock_release (&filesys_lock);
 	}
+	
 
 	/* 최종 성공 여부 반환 */
 	return success;
