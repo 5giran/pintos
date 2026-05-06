@@ -87,6 +87,10 @@ syscall_handler (struct intr_frame *f)
 			thread_exit ();
 			break;
 
+		case SYS_WAIT:
+			f->R.rax = process_wait ((tid_t) f->R.rdi);
+			break;
+
 		case SYS_CREATE:
 			f->R.rax = sys_create ((const char*) f->R.rdi, 
 								   (unsigned) f->R.rsi);
