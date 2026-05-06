@@ -1,19 +1,38 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
+#include "devices/input.h"
+#include "filesys/file.h"
+#include "filesys/filesys.h"
+#include "lib/kernel/stdio.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/loader.h"
 #include "userprog/gdt.h"
 #include "threads/flags.h"
-#include "threads/init.h"      // power_off 선언 있음
-#include "threads/vaddr.h"     // is_user_vaddr
+#include "threads/mmu.h"
+#include "threads/vaddr.h"
+#include "threads/init.h"
+#include "threads/palloc.h"
+#include "userprog/fd.h"
+#include "userprog/process.h"
 #include "intrinsic.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
-static void exit_with_status (int status);
-static void check_address (const void *addr);
+struct lock filesys_lock;
+
+static bool sys_create (const char *ufile, unsigned initial_size);
+static bool sys_remove (const char *ufile);
+static int sys_open (const char *ufile);
+static int sys_filesize (int fd);
+static int sys_read (int fd, void *ubuf, unsigned size);
+static int sys_write (int fd, const void *ubuf, unsigned size);
+static void sys_seek (int fd, unsigned position);
+static unsigned sys_tell (int fd);
+static void sys_close (int fd);
 
 /* 시스템 콜.
  *
@@ -30,6 +49,7 @@ static void check_address (const void *addr);
 void
 syscall_init (void) 
 {
+	lock_init (&filesys_lock);
 	/* syscall 진입 시 사용할 코드 세그먼트 정보 설정 */
 	write_msr(MSR_STAR, ((uint64_t)SEL_UCSEG - 0x10) << 48  |
 			((uint64_t)SEL_KCSEG) << 32);
@@ -47,9 +67,9 @@ syscall_init (void)
 /* 주요 system call interface */
 /* 인터럽트나 시스템 콜이 발생했을 때 cpu 레지스터 상태를 저장한 구조체가 intr_frame */
 /* 시스템콜 인자들이 syscall_handler에 일반 함수 인자처럼 들어오는 게 아니라, 
- * f 안에 저장된 레지스터 값으로 들어온다. */
+ * 인터럽트 프레임 f 안에 저장된 레지스터 값으로 들어온다. */
 void
-syscall_handler (struct intr_frame *f UNUSED) 
+syscall_handler (struct intr_frame *f) 
 {
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
@@ -62,63 +82,427 @@ syscall_handler (struct intr_frame *f UNUSED)
 
 		/* 현재 프로세스 종료 */
 		case SYS_EXIT:
-			exit_with_status ((int) f->R.rdi);
+			/* thread_exit() 내부에서 process_exit() 호출해 현재 스레드 종료 */
+			thread_current ()->exit_status = (int) f->R.rdi;
+			thread_exit ();
 			break;
 
-		/* write(fd, buffer, size) */
-		case SYS_WRITE: {
-			/* 첫 번째 인자 fd는 rdi */
-			int fd = (int) f->R.rdi;
+		case SYS_WAIT:
+			f->R.rax = process_wait ((tid_t) f->R.rdi);
+			break;
 
-			/* 두 번째 인자 buffer는 rsi */
-			const void *buffer = (const void *) f->R.rsi;
+		case SYS_CREATE:
+			f->R.rax = sys_create ((const char*) f->R.rdi, 
+								   (unsigned) f->R.rsi);
+			break;
 
-			/* 세 번째 인자 size는 rdx */
-			unsigned size = (unsigned) f->R.rdx;
+		case SYS_REMOVE:
+			f->R.rax = sys_remove ((const char*) f->R.rdi);
+			break;
 
-			/* size > 0 이면 시작 주소 검증 */
-			if (size > 0) {
-				check_address (buffer);
+		case SYS_OPEN:
+			f->R.rax = sys_open ((const char*) f->R.rdi);
+			break;
 
-				/* 버퍼의 마지막 바이트 주소도 검증 */
-				check_address ((const uint8_t *) buffer + size - 1);
+		case SYS_FILESIZE:
+			f->R.rax = sys_filesize ((int) f->R.rdi);
+			break;
+
+		case SYS_READ:
+			f->R.rax = sys_read ((int) f->R.rdi, 
+								 (void *) f->R.rsi,
+								 (unsigned) f->R.rdx);
+			break;
+
+		case SYS_WRITE:
+			f->R.rax = sys_write ((int) f->R.rdi, 
+								 (const void *) f->R.rsi,
+								 (unsigned) f->R.rdx);
+			break;
+
+		case SYS_SEEK:
+			sys_seek ((int) f->R.rdi,
+					  (unsigned) f->R.rsi);
+			break;
+			
+		case SYS_TELL:
+			f->R.rax = sys_tell ((int) f->R.rdi);
+			break;
+
+		case SYS_CLOSE:
+			sys_close ((int) f->R.rdi);
+			break;
+		
+		/* exec (const char *cmd_line) */
+		case SYS_EXEC: {
+			
+			/* 첫 번째 인자 file은 rdi */
+			char *user_file = (char *) f->R.rdi; // exec("echo hello") 라는 system call을 user process가 호출했다면, f->R.rdi 는 "echo hello" 문자열이 있는 user memory 주소
+
+			/* cmd_line 문자열을 kernel page에 복사, 내부적으로 주소 검증도 진행.. 하는지는 확인 필요 */
+			char *kernel_page = copy_in_string (user_file);
+
+			/* 복사 성공하면 */
+			if (process_exec (kernel_page) == -1) {
+				thread_exit ();
+			}
+			
+		}
+
+		case SYS_FORK: {
+			char *thread_name = copy_in_string ((const char *) f->R.rdi);
+			if (thread_name == NULL) {
+				f->R.rax = TID_ERROR;
+				break;
 			}
 
-			/* fd == 1 은 stdout */
-			if (fd == 1) {
-				/* 콘솔에 버퍼 내용을 출력 */
-				putbuf (buffer, size);
-
-				/* 반환값 = 실제 쓴 바이트 수 */
-				f->R.rax = size;
-			} else {
-				/* 지금은 stdout만 지원 */
-				f->R.rax = -1;
-			}
+			f->R.rax = process_fork (thread_name, f);
+			palloc_free_page (thread_name);
 			break;
 		}
 
 		/* 아직 구현 안 한 syscall은 비정상 종료 */
 		default:
-			exit_with_status (-1);
+			thread_exit ();
 			break;
+		
 	}
 }
 
-static void
-exit_with_status (int status) 
+void
+validate_user_read (const void *buffer, size_t size)
 {
-	/* 종료 메시지 출력 */
-	printf ("%s: exit(%d)\n", thread_name (), status);
+    if (size == 0) return;
+    if (buffer == NULL) thread_exit (); // size > 0인데 주소가 없다, 메모리 접근 불가.
 
-	/* 현재 스레드 종료 */
-	thread_exit ();
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf =(const uint8_t *) buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) thread_exit (); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down (bf);
+	const uint8_t *end_page = pg_round_down (end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
+		if (!is_user_vaddr (i)) thread_exit ();
+		// page가 실제 mapped 되어있지 않다면 현재 프로세스 exit(-1)
+		// pml4_get_page 함수 인수 확인, thread_current()->pml4: 현재 실행중인 함수 인수 테이블
+		if (!pml4_get_page (thread_current()->pml4, i)) thread_exit ();
+	}
 }
 
-static void
-check_address (const void *addr) 
+void
+validate_user_write(const void *buffer, size_t size)
 {
-	/* NULL 이거나 유저 가상주소 범위 밖이면 비정상 종료 */
-	if (addr == NULL || !is_user_vaddr (addr))
-		exit_with_status (-1);
+	if (size == 0) return;
+    if (buffer == NULL) thread_exit (); // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
+
+	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
+    const uint8_t *bf = (const uint8_t *) buffer;
+	// end address 따로 정의: buffer의 끝 바이트 주소
+	const uint8_t *end_adr = bf+size-1;
+
+	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
+	if (end_adr < bf) thread_exit (); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+
+	// 순회할 시작페이지, 끝 페이지 정의
+	const uint8_t *start_page = pg_round_down (bf);
+	const uint8_t *end_page = pg_round_down (end_adr);
+
+    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
+		if (!is_user_vaddr (i)) thread_exit ();
+		// writable 페이지인지 검증 - PTE 사용
+		// pte가 NULL이 아닌지, *pte에 PTE_P가 있는지, *pte에 PTE_U가 있는지,  *pte에 PTE_W가 있는지 - 모두 충족해야함
+		uint64_t *pte = pml4e_walk (thread_current ()->pml4, (const uint64_t)i, false);
+
+		if (pte == NULL || (*pte & PTE_P) == 0 || (*pte & PTE_U) == 0)
+			thread_exit ();
+
+		if ((*pte & PTE_W) == 0)
+			thread_exit ();
+    }
+}
+
+void
+// dst: 복사 결과가 들어갈 커널 버퍼, usrc: 복사 원본 유저 메모리 주소, size: 복사할 바이트 수
+copy_in (void *dst, const void *usrc, size_t size)
+{
+	// readable 유효성 검사
+	validate_user_read (usrc, size);
+	// user memory -> kernel memory 복사
+	memcpy (dst, usrc, size);
+}
+
+// udst: 유저 메모리 목적지, src: 커널 복사 원본
+void
+copy_out (void *udst, const void *src, size_t size)
+{
+	// writable 유효성 검사
+	validate_user_write (udst, size);
+	// kernel memory -> user memory 복사
+	memcpy (udst, src, size);
+}
+
+/* TODO: user string을 kernel buffer로 복사 */
+// ustr: 유저가 넘긴 문자열 시작 주소, return: 커널 메모리에 새로 복사해 둔 문자열 주소
+char *
+copy_in_string (const char *ustr)
+{
+	if (ustr == NULL) thread_exit ();
+	// NULL 아니면 1바이트씩 추적 가능하게 타입 캐스팅
+	const uint8_t *us = (const uint8_t *) ustr;
+	
+	// 검증과 kbuf 할당 분리, 현재는 검증단계
+	size_t i = 0;
+	// kbuf는 한 페이지짜리 커널 버퍼이므로, PGSIZE 바이트까지만 복사한다.
+	while (i < PGSIZE) {
+		validate_user_read (us+i, 1);
+		if (us[i] == '\0') {
+			// 정상 종료, 할당 로직으로 넘어가야함.
+			break;
+		} else {
+			i++;
+		}
+	}
+	/* 여기까지 왔다는 건 0..PGSIZE-1 범위에서 '\0'을 못 찾았다는 뜻이다.
+   ustr[PGSIZE]는 허용 범위 밖이므로 읽지 않고 실패 처리한다. */
+	if (i == PGSIZE) thread_exit ();
+
+
+	// 커널 버퍼 할당, 0: flag, 옵션 없음
+	char *kbuf = palloc_get_page (0);
+	if (kbuf == NULL) thread_exit ();
+
+	// size는 '\0'도 같이 읽기 위해서
+	copy_in (kbuf, us, i+1);
+	return kbuf;
+}
+
+static bool 
+sys_create (const char *ufile, unsigned initial_size)
+{
+	char *kfile = copy_in_string (ufile);
+	bool ok;
+
+	lock_acquire (&filesys_lock);
+	ok = filesys_create (kfile, initial_size);
+	lock_release (&filesys_lock);
+
+	palloc_free_page (kfile);
+	return ok;
+}
+
+static bool 
+sys_remove (const char *ufile)
+{
+	char *kfile = copy_in_string (ufile);
+	bool ok;
+
+	lock_acquire (&filesys_lock);
+	ok = filesys_remove (kfile);
+	lock_release (&filesys_lock);
+
+	palloc_free_page (kfile);
+	return ok;
+}
+
+
+static int 
+sys_open (const char *ufile)
+{
+	char *kfile = copy_in_string (ufile);
+	struct file *file;
+	int fd;
+
+	lock_acquire (&filesys_lock);
+	file = filesys_open (kfile);
+	lock_release (&filesys_lock);
+
+	palloc_free_page (kfile);
+
+	if (file == NULL) {
+		return -1;
+	}
+
+	fd = fd_alloc (file);
+	if (fd == -1) {
+		lock_acquire (&filesys_lock);
+		file_close (file);
+		lock_release (&filesys_lock);
+	}
+	return fd;
+}
+
+static int 
+sys_filesize (int fd)
+{
+	struct file *file = fd_get (fd);
+	int len;
+
+	if (file == NULL) {
+		return -1;
+	}
+
+	lock_acquire (&filesys_lock);
+	len = (int) file_length (file);
+	lock_release (&filesys_lock);
+
+	return len;
+}
+
+static int 
+sys_read (int fd, void *ubuf, unsigned size)
+{
+uint8_t *kbuf;
+	unsigned total = 0;
+
+	if (size == 0)
+		return 0;
+
+	validate_user_write (ubuf, size);
+
+	if (fd == 1)
+		return -1;
+
+	kbuf = palloc_get_page (0);
+	if (kbuf == NULL)
+		return -1;
+
+	while (total < size) {
+		unsigned chunk = size - total > PGSIZE ? PGSIZE : size - total;
+		int bytes = 0;
+
+		if (fd == 0) {
+			for (unsigned i = 0; i < chunk; i++)
+				kbuf[i] = input_getc ();
+			bytes = (int) chunk;
+		} else {
+			struct file *file = fd_get (fd);
+			if (file == NULL) {
+				palloc_free_page (kbuf);
+				return -1;
+			}
+
+			lock_acquire (&filesys_lock);
+			bytes = (int) file_read (file, kbuf, chunk);
+			lock_release (&filesys_lock);
+		}
+
+		if (bytes <= 0)
+			break;
+
+		copy_out ((uint8_t *) ubuf + total, kbuf, (size_t) bytes);
+		total += (unsigned) bytes;
+
+		if ((unsigned) bytes < chunk)
+			break;
+	}
+
+	palloc_free_page (kbuf);
+	return (int) total;
+}
+
+static int 
+sys_write (int fd, const void *ubuf, unsigned size)
+{
+	uint8_t *kbuf;
+	unsigned total = 0;
+
+	if (size == 0) {
+		return 0;
+	}
+
+	validate_user_read (ubuf, size);
+
+	if (fd == 0) {
+		return -1;
+	}
+
+	kbuf = palloc_get_page (0);
+	if (kbuf == NULL) {
+		return -1;
+	}
+
+	while (total < size) {
+		unsigned chunk = size - total > PGSIZE ? PGSIZE : size - total;
+		int written;
+	
+		copy_in (kbuf, (const uint8_t *) ubuf + total, chunk);
+
+		if (fd == 1) {
+			putbuf ((char *) kbuf, chunk);
+			total += chunk;
+			continue;
+		}
+
+		{
+			struct file *file = fd_get (fd);
+			if (file == NULL) {
+				palloc_free_page (kbuf);
+				return -1;
+			}
+
+			lock_acquire (&filesys_lock);
+			written = (int) file_write (file, kbuf, chunk);
+			lock_release (&filesys_lock);
+		}
+
+		if (written <= 0) {
+			break;
+		}
+
+		total += written;
+		if ((unsigned) written < chunk) {
+			break;
+		}
+	}
+	palloc_free_page (kbuf);
+	return (int) total;
+}
+
+static void 
+sys_seek (int fd, unsigned position)
+{
+	struct file *file = fd_get (fd);
+
+	if (file == NULL) {
+		return;
+	}
+
+	lock_acquire (&filesys_lock);
+	file_seek (file, (off_t) position);
+	lock_release (&filesys_lock);
+}
+
+static unsigned 
+sys_tell (int fd)
+{
+	struct file *file = fd_get (fd);
+	unsigned pos;
+
+	if (file == NULL) {
+		return (unsigned) -1;
+	}
+
+	lock_acquire (&filesys_lock);
+	pos = (unsigned) file_tell (file);
+	lock_release (&filesys_lock);
+
+	return pos;
+}
+
+static void 
+sys_close (int fd)
+{
+	fd_close (fd);
 }

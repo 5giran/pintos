@@ -279,14 +279,11 @@ void thread_print_stats(void)
    새 스레드는 AUX를 인자로 FUNCTION을 실행하며 ready queue에 추가된다.
    성공하면 새 스레드 식별자를 반환하고, 실패하면 TID_ERROR를 반환한다.
 
-   thread_start()가 이미 호출되었다면 새 스레드는 thread_create()가 반환되기 전에
-   스케줄될 수 있다. 심지어 thread_create()가 반환되기 전에 종료될 수도 있다.
-   반대로 기존 스레드는 새 스레드가 스케줄되기 전까지 얼마든지 더 실행될 수 있다.
-   실행 순서를 보장해야 한다면 세마포어 같은 동기화 수단을 사용해야 한다.
-
-   제공된 코드는 새 스레드의 `priority' 멤버를 PRIORITY로 설정하지만,
-   실제 우선순위 스케줄링은 구현되어 있지 않다.
-   우선순위 스케줄링은 Problem 1-3의 목표다. */
+   새 스레드는 thread_create()가 반환되기 전에 스케줄될 수 있다. (unblock 이라면 언제든 실행될 수 있음)
+	 심지어 thread_create()가 반환되기 전에 종료될 수도 있다.
+   반대로 스케줄러가 새 스레드를 아직 선택하지 않으면, 기존 스레드가 계속 실행될 수도 있다.
+   즉, thread_create()는 실행 순서를 보장하지 않고, 순서 보장이 필요하다면 세마포어 같은 동기화 수단을 사용해야 한다.
+*/
 tid_t thread_create(const char *name, int priority,
 					thread_func *function, void *aux)
 {
@@ -307,16 +304,17 @@ tid_t thread_create(const char *name, int priority,
 	/* 스케줄되면 kernel_thread를 호출하도록 설정한다.
 	 * 참고로 rdi는 첫 번째 인자이고, rsi는 두 번째 인자다. 
 	 * thread가 나중에 CPU를 받았을 때 kernel_thread(initd, fn_copy)로 시작하도록
-	 * 미래의 CPU 상태를 미리 세팅
+	 * 미래의 CPU 상태를 미리 세팅, 새 스레드는 저장해둘 과거 CPU 상태가 없어서 커널이 일부러 가짜 초기 CPU 상태를 만들어주는 것이다.
+	 * 새 커널 스레드를 kernel_thread(function, aux)에서 시작시키기 위한 CPU 상태를 저장
 	*/
 	t->tf.rip = (uintptr_t)kernel_thread;
 	t->tf.R.rdi = (uint64_t)function;
 	t->tf.R.rsi = (uint64_t)aux;
-	t->tf.ds = SEL_KDSEG;
-	t->tf.es = SEL_KDSEG;
-	t->tf.ss = SEL_KDSEG;
-	t->tf.cs = SEL_KCSEG;
-	t->tf.eflags = FLAG_IF;
+	t->tf.ds = SEL_KDSEG; // 커널 데이터 세그먼트
+	t->tf.es = SEL_KDSEG; 
+	t->tf.ss = SEL_KDSEG; // 커널 스택 세그먼트
+	t->tf.cs = SEL_KCSEG; // 커널 코드 세그먼트
+	t->tf.eflags = FLAG_IF; // interrupt flag on
 
 	/* run queue에 추가한다. */
 
@@ -576,6 +574,18 @@ init_thread(struct thread *t, const char *name, int priority)
 
 	/* 새 thread는 아직 donation을 받은 적이 없으므로 donations 리스트를 빈 리스트로 시작한다. */
 	list_init(&t->donations);
+
+	#ifdef USERPROG
+	/* 새 스레드의 default exit_status는 -1 이다.*/
+	t->exit_status = -1;
+	/* 새 스레드의 children list initialization */
+	list_init(&t->children);
+	/* 새 스레드의 child_status initialization */
+	t->child_status = NULL;
+	/* 새 스레드의 running_file initialization */
+	t->running_file = NULL;
+
+	#endif
 
 	t->magic = THREAD_MAGIC;
 }
