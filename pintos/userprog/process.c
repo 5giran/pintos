@@ -413,7 +413,7 @@ process_exec (void *f_name)
 	char *file_name = f_name;
 	bool success;
 	/* 파싱 결과 담을 페이지(포인터 연산으로 배열처럼 이용) */
-	char **argv_tokens = palloc_get_fpage (0);
+	char **argv_tokens = palloc_get_page (0);
 	if (argv_tokens == NULL) {
 		palloc_free_page(file_name);
 		return -1;
