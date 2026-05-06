@@ -4,7 +4,7 @@
 
 이 문서는 `p2_user_memory_syscall_parallel_work_guide.md`의 3번 담당 범위인 `Dispatcher / Fork / Exec / Exit / Rox` 구현 기록을 누적해서 정리하는 문서다.
 
-구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현, parent-child status record의 초기 구조/helper, `process_create_initd()` 연결, `process_exit()`의 child status 기록/정리까지 기록한다.
+구현 하나마다 문서를 새로 만들지 않고, 기능이 추가될 때마다 이 문서 안에 section을 추가한다. 현재는 `exit` 기본 구현, parent-child status record의 초기 구조/helper, `process_create_initd()` 연결, `process_exit()`의 child status 기록/정리, ROX 기본 구현까지 기록한다.
 
 ## 2. Exit 기본 구현
 
@@ -82,7 +82,6 @@ process_exit()
 - `process_wait()` 완성
 - `fork` 성공/실패 동기화
 - `exec` 인자 복사와 load 실패 처리 연결
-- `rox` 관련 실행 파일 write deny 처리
 
 또 비정상 종료 경로에서는 최종적으로 `exit_status = -1`이 보장되어야 한다. 현재는 기본값을 `-1`로 초기화했기 때문에 `thread_exit()`만 호출해도 값이 유지되지만, 코드 의도를 명확히 하려면 invalid syscall이나 invalid pointer 경로에서 `exit_status = -1`을 명시하는 편이 좋다.
 
@@ -630,7 +629,7 @@ initd (void *aux)
 
 이 구조에서는 child가 parent보다 먼저 실행되어도 `cs` 자체는 이미 만들어져 있고 aux로 전달되어 있다. 따라서 child는 `thread_current()->child_status`를 먼저 세팅한 뒤 실행을 계속할 수 있다.
 
-현재 한계는 `process_wait()`이 아직 이 record를 완전히 사용하지 않는다는 점이다. 다음 단계에서 parent wait 시 record에서 status를 회수하는 흐름을 연결해야 한다.
+이후 `process_exit()`과 `process_wait()`에서 이 record를 사용해 child의 종료 status를 기록하고 회수하는 흐름까지 연결했다. `process_fork()`도 같은 원칙으로 child status record를 만들고 child에게 전달해야 한다.
 
 ## 5. `process_exit()` child status 기록과 children 정리
 
@@ -702,9 +701,9 @@ while children list가 비어 있지 않음
 
 이 정리는 parent가 child를 만들고 wait하지 않은 채 종료되는 경우 필요하다. parent 몫 참조를 내려놓으면, child가 이미 종료되어 child 몫도 내려놓은 경우 record가 free된다. child가 아직 살아 있다면 record는 child 몫 참조 때문에 남아 있고, child가 나중에 exit하면서 최종 release한다.
 
-현재 한계는 `process_wait()`이 아직 구현되지 않았다는 점이다. `parent->children` list는 parent가 만든 child record들의 장부다. `process_wait()`으로 어떤 child의 status를 회수했다면, 그 child record 항목을 이 장부에서 먼저 제거해야 한다. 그 다음 parent가 그 record에 대해 들고 있던 참조를 `child_status_release()`로 내려놓는다. 이렇게 해야 나중에 parent가 exit하면서 `children` list를 정리할 때, 이미 wait에서 처리한 record를 다시 만지지 않는다.
+`parent->children` list는 parent가 만든 child record들의 장부다. `process_wait()`으로 어떤 child의 status를 회수했다면, 그 child record 항목을 이 장부에서 먼저 제거해야 한다. 그 다음 parent가 그 record에 대해 들고 있던 참조를 `child_status_release()`로 내려놓는다. 이렇게 해야 나중에 parent가 exit하면서 `children` list를 정리할 때, 이미 wait에서 처리한 record를 다시 만지지 않는다.
 
-## 6. `process_wait()` 반환값 맥락
+## 6. `process_wait()` 구현과 반환값 맥락
 
 `process_wait(child_tid)`는 단순히 child가 끝날 때까지 멈추는 함수가 아니다. parent가 child에게 맡긴 일이 어떤 결과로 끝났는지 회수하는 함수다.
 
@@ -761,9 +760,117 @@ process_wait() 반환값
 
 `process_wait()`은 status 회수와 함께 record 정리도 맡는다. 이때 제거되는 것은 child process 자체가 아니라 parent의 `children` list에 들어 있던 `child_status` record 항목이다. 순서는 `status 저장 -> list_remove(&cs->elem) -> child_status_release(cs)`가 되어야 한다. release에서 record가 free될 수 있으므로, `cs->elem`을 만지는 `list_remove()`를 먼저 끝내야 한다.
 
-## 7. 현재 상태와 이후 기록 위치
+현재 구현은 다음 흐름이다.
 
-현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했고, `process_exit()`에는 child status 기록과 children record 정리 흐름을 연결했다. 다음 단계는 `process_wait()` 구현을 완성하고, 이후 `process_fork()` 경로에도 같은 lifecycle record 구조를 연결하는 것이다.
+```c
+int
+process_wait (tid_t child_tid)
+{
+	struct thread *curr = thread_current ();
+	struct child_status *cs = child_status_find (curr, child_tid);
+
+	if (cs == NULL) {
+		return -1;
+	}
+	if (cs->has_been_waited) {
+		return -1;
+	}
+
+	cs->has_been_waited = true;
+	if (!cs->has_exited) {
+		sema_down (&cs->wait_sema);
+	}
+
+	int child_es = cs->exit_status;
+	list_remove (&cs->elem);
+	child_status_release (cs);
+
+	return child_es;
+}
+```
+
+`has_been_waited = true`는 `sema_down()` 전에 설정한다. child가 아직 살아 있어서 parent가 잠들더라도, 그 child에 대한 wait 권한은 이미 사용된 상태이기 때문이다.
+
+## 7. ROX 기본 구현
+
+ROX는 running executable protection이다. 실행 중인 프로그램 파일을 다른 process나 자기 자신이 write하지 못하게 막는 기능이다.
+
+막아야 하는 상황은 다음과 같다.
+
+```text
+process A
+  testprog 실행 중
+
+process B 또는 process A
+  testprog 파일 open
+  write 시도
+  실패해야 함
+```
+
+실행 파일은 현재 process의 코드와 데이터를 만든 원본이다. 실행 중인 파일이 바뀌면 이미 메모리에 올라간 코드와 파일에 남아 있는 내용이 서로 달라질 수 있다. 그래서 load에 성공한 executable file에는 write deny를 걸고, process가 살아 있는 동안 그 file object를 닫지 않고 보관한다.
+
+현재 구조는 다음과 같다.
+
+```c
+struct thread {
+#ifdef USERPROG
+	struct file *running_file;
+#endif
+};
+```
+
+`struct file *`는 포인터만 보관하면 되므로 `thread.h`에는 `struct file;` forward declaration만 둔다. 실제 파일 함수 사용은 `process.c`에서 `filesys/file.h`를 통해 한다.
+
+새 thread는 실행 파일을 아직 갖고 있지 않으므로 `init_thread()`에서 `NULL`로 초기화한다.
+
+```c
+#ifdef USERPROG
+	t->running_file = NULL;
+#endif
+```
+
+`load()`가 성공하면 실행 파일에 write deny를 걸고 현재 thread에 저장한다.
+
+```c
+success = true;
+file_deny_write (file);
+t->running_file = file;
+
+palloc_free_page (arg_addr);
+return success;
+```
+
+성공 경로에서는 `file_close(file)`을 호출하지 않는다. 닫아 버리면 이 file object가 사라지고, process가 살아 있는 동안 write deny 상태를 유지할 수 없다.
+
+반대로 load 실패 경로에서는 실행 파일을 실행하지 않을 것이므로 file을 닫는다.
+
+```c
+done:
+	if (arg_addr != NULL) {
+		palloc_free_page (arg_addr);
+	}
+	if (file != NULL) {
+		file_close (file);
+	}
+	return success;
+```
+
+process가 종료되거나 `exec()`로 기존 address space를 정리할 때는 `process_cleanup()`에서 실행 파일을 닫는다.
+
+```c
+if (curr->running_file != NULL) {
+	file_close (curr->running_file);
+	curr->running_file = NULL;
+}
+```
+
+`file_close()` 내부에서 `file_allow_write()`가 호출되므로, 현재 구현은 close만 호출한다. 즉 running file을 닫는 순간 deny write도 함께 해제된다.
+
+이 구조에서 `process_cleanup()`에 실행 파일 정리를 둔 이유는 `process_exit()`뿐 아니라 `process_exec()`에서도 기존 실행 파일을 정리해야 하기 때문이다. `exec()`는 현재 process의 프로그램 이미지를 새 프로그램으로 교체하므로, 기존 executable에 걸려 있던 write deny를 풀고 닫은 뒤 새 executable을 load해야 한다.
+
+## 8. 현재 상태와 이후 기록 위치
+
+현재 record에는 `ref_cnt` 필드와 `child_status_release()` helper까지 들어갔다. 첫 user process 생성 경로인 `process_create_initd()`에는 record 생성과 child 전달 흐름을 연결했고, `process_exit()`에는 child status 기록과 children record 정리 흐름을 연결했다. `process_wait()`은 child status 검색, 대기, status 회수, parent 몫 release까지 연결했다. 또한 ROX 기본 구현으로 실행 파일 write deny와 cleanup 해제를 연결했다. 다음 단계는 `process_fork()` 경로에도 같은 lifecycle record 구조를 연결하는 것이다.
 
 현재까지 완료된 parent-child record 기반 작업은 다음이다.
 
@@ -777,20 +884,21 @@ process_wait() 반환값
 - `initd()`에서 aux로 전달받은 child status record를 현재 thread의 `child_status`에 연결한다.
 - `process_exit()`에서 현재 thread의 종료 status를 child status record에 기록하고 parent를 깨운다.
 - `process_exit()`에서 wait하지 않은 children record들의 parent 몫 참조를 release한다.
+- `process_wait()`에서 child status record를 찾아 대기하고, child exit status를 반환한 뒤 record를 정리한다.
+- `thread.running_file`로 현재 실행 중인 executable file을 보관한다.
+- `load()` 성공 시 `file_deny_write()`를 걸고, process cleanup 시 running file을 close한다.
 
 다음에 이어서 구현할 작업은 다음이다.
 
-- `process_wait()`에서 parent의 `children` list를 검색하고, `has_been_waited` 규칙을 적용해야 한다.
 - `process_fork()`에서 record를 생성해 parent의 `children`에 등록해야 한다.
 - fork child thread가 시작할 때 자기 `child_status` pointer를 가져야 한다.
+- `exec` syscall 경로에서 user pointer 복사, load 실패 처리, 기존 image 정리 흐름을 점검해야 한다.
 
 앞으로 구현이 추가되면 이 문서에 다음 section을 이어서 추가한다.
 
 ```text
-8. process_wait 완성
 9. process_fork()
-10. process_exec()
-11. Rox 처리
+10. process_exec syscall 경로 점검
 ```
 
 각 section은 실제 구현 코드와 함께 "이전 구조", "현재 변경", "설계 의도", "남은 한계"를 짧게 기록한다.

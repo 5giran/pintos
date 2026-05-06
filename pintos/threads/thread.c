@@ -582,6 +582,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	list_init(&t->children);
 	/* 새 스레드의 child_status initialization */
 	t->child_status = NULL;
+	/* 새 스레드의 running_file initialization */
+	t->running_file = NULL;
 
 	#endif
 
