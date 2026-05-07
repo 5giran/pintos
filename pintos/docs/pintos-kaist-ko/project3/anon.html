@@ -1,0 +1,921 @@
+
+<!DOCTYPE HTML>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>익명 페이지(Anonymous Page) · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="stack_growth.html"/>
+    
+    
+    <link rel="prev" href="vm_management.html"/>
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="검색어를 입력하세요"/>
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        <li class="header">소개</li>
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../index.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.2" data-path="../introduction/getting_started.html">
+            
+                <a href="../introduction/getting_started.html">
+            
+                    
+                    시작하기
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.3" data-path="../introduction/grading.html">
+            
+                <a href="../introduction/grading.html">
+            
+                    
+                    채점
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.4" data-path="../introduction/legal_and_ethical_issues.html">
+            
+                <a href="../introduction/legal_and_ethical_issues.html">
+            
+                    
+                    법적 및 윤리적 문제
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 1: 스레드(Threads)</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../project1/introduction.html">
+            
+                <a href="../project1/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../project1/alarm_clock.html">
+            
+                <a href="../project1/alarm_clock.html">
+            
+                    
+                    알람 시계(Alarm Clock)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../project1/priority_scheduling.html">
+            
+                <a href="../project1/priority_scheduling.html">
+            
+                    
+                    우선순위 스케줄링(Priority Scheduling)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../project1/advanced_scheduler.html">
+            
+                <a href="../project1/advanced_scheduler.html">
+            
+                    
+                    고급 스케줄러(Advanced Scheduler)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.5" data-path="../project1/FAQ.html">
+            
+                <a href="../project1/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 2: 사용자 프로그램(User Programs)</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../project2/introduction.html">
+            
+                <a href="../project2/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../project2/argument_passing.html">
+            
+                <a href="../project2/argument_passing.html">
+            
+                    
+                    인자 전달(Argument Passing)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../project2/user_memory.html">
+            
+                <a href="../project2/user_memory.html">
+            
+                    
+                    사용자 메모리(User Memory)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.4" data-path="../project2/system_call.html">
+            
+                <a href="../project2/system_call.html">
+            
+                    
+                    시스템 콜(System Calls)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.5" data-path="../project2/process_termination.html">
+            
+                <a href="../project2/process_termination.html">
+            
+                    
+                    프로세스 종료 메시지
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.6" data-path="../project2/deny_write.html">
+            
+                <a href="../project2/deny_write.html">
+            
+                    
+                    실행 파일 쓰기 거부
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.7" data-path="../project2/dup.html">
+            
+                <a href="../project2/dup.html">
+            
+                    
+                    파일 디스크립터 확장(Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.8" data-path="../project2/FAQ.html">
+            
+                <a href="../project2/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 3: 가상 메모리(Virtual Memory)</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="introduction.html">
+            
+                <a href="introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="vm_management.html">
+            
+                <a href="vm_management.html">
+            
+                    
+                    메모리 관리
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="4.3" data-path="anon.html">
+            
+                <a href="anon.html">
+            
+                    
+                    익명 페이지(Anonymous Page)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.4" data-path="stack_growth.html">
+            
+                <a href="stack_growth.html">
+            
+                    
+                    스택 증가(Stack Growth)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.5" data-path="memory_mapped_files.html">
+            
+                <a href="memory_mapped_files.html">
+            
+                    
+                    메모리 매핑 파일(Memory Mapped Files)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.6" data-path="swapping.html">
+            
+                <a href="swapping.html">
+            
+                    
+                    스왑 인/아웃(Swap In/Out)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.7" data-path="cow.html">
+            
+                <a href="cow.html">
+            
+                    
+                    쓰기 시 복사(Copy-on-Write, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.8" data-path="FAQ.html">
+            
+                <a href="FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 4: 파일 시스템(File System)</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="../project4/introduction.html">
+            
+                <a href="../project4/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="../project4/indexed_and_extensible_files.html">
+            
+                <a href="../project4/indexed_and_extensible_files.html">
+            
+                    
+                    인덱스 기반 확장 가능 파일
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.3" data-path="../project4/subdirectories.html">
+            
+                <a href="../project4/subdirectories.html">
+            
+                    
+                    하위 디렉터리와 소프트 링크
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.4" data-path="../project4/buffer_cache.html">
+            
+                <a href="../project4/buffer_cache.html">
+            
+                    
+                    버퍼 캐시(Buffer Cache, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.5" data-path="../project4/synchronization.html">
+            
+                <a href="../project4/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.6" data-path="../project4/FAQ.html">
+            
+                <a href="../project4/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">부록</li>
+        
+        
+    
+        <li class="chapter " data-level="6.1" data-path="../appendix/threads.html">
+            
+                <a href="../appendix/threads.html">
+            
+                    
+                    스레드(Threads)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.2" data-path="../appendix/synchronization.html">
+            
+                <a href="../appendix/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.3" data-path="../appendix/memory_allocation.html">
+            
+                <a href="../appendix/memory_allocation.html">
+            
+                    
+                    메모리 할당
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.4" data-path="../appendix/virtual_address.html">
+            
+                <a href="../appendix/virtual_address.html">
+            
+                    
+                    가상 주소(Virtual Address)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.5" data-path="../appendix/page_table.html">
+            
+                <a href="../appendix/page_table.html">
+            
+                    
+                    페이지 테이블(Page Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.6" data-path="../appendix/debugging_tools.html">
+            
+                <a href="../appendix/debugging_tools.html">
+            
+                    
+                    디버깅 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.7" data-path="../appendix/development_tools.html">
+            
+                <a href="../appendix/development_tools.html">
+            
+                    
+                    개발 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.8" data-path="../appendix/hash_table.html">
+            
+                <a href="../appendix/hash_table.html">
+            
+                    
+                    해시 테이블(Hash Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            GitBook으로 게시됨
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href="../index.html">익명 페이지(Anonymous Page)</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h2 id="anonymous-page">익명 페이지(Anonymous Page)</h2>
+<p>이 프로젝트의 이 부분에서는 <em>익명 페이지(anonymous page)</em>라고 하는 디스크 기반이 아닌 이미지를 구현합니다.</p>
+<p>익명 매핑(anonymous mapping)에는 백업 파일이나 장치가 없습니다. 파일 기반 페이지(file-backed page)와 달리
+이름이 붙은 파일 소스가 없기 때문에 익명이라고 부릅니다. 익명 페이지는 스택(stack)과 힙(heap)처럼
+실행 파일에서 사용됩니다.</p>
+<p>익명 페이지를 설명하는 구조체인 <code>anon_page</code>는 <code>include/vm/anon.h</code>에 있습니다.
+현재는 비어 있지만, 구현하면서 익명 페이지에 필요한 정보나 상태를 저장할 멤버를 추가할 수 있습니다. 또한
+페이지의 일반 정보를 담고 있는 <code>struct page</code>는 <code>include/vm/page.h</code>에서 확인할 수 있습니다.
+익명 페이지의 경우 페이지 구조체 안에 <code>struct anon_page anon</code>이 포함됩니다.</p>
+<h3 id="page-initialization-with-lazy-loading">지연 로딩(lazy loading)을 통한 페이지 초기화</h3>
+<p>지연 로딩(lazy loading)은 메모리 로드를 실제로 필요한 시점까지 미루는 설계입니다. 페이지가 할당되었다는 것은
+해당 페이지에 대응하는 페이지 구조체가 존재한다는 뜻이지만, 전용 물리 프레임(frame)은 없고 페이지의 실제 내용도
+아직 로드되지 않았습니다. 내용은 페이지 폴트(page fault)로 필요성이 신호될 때, 즉 실제로 필요한 시점에만
+로드됩니다.</p>
+<p>페이지 타입이 세 가지이므로 초기화 루틴은 페이지마다 다릅니다. 아래 섹션에서 다시 설명하겠지만, 여기서는
+페이지 초기화 흐름을 높은 수준에서 설명합니다. 먼저 커널(kernel)이 새 페이지 요청을 받으면
+<code>vm_alloc_page_with_initializer</code>가 호출됩니다. 초기화 함수(initializer)는 페이지 구조체를 할당하고
+페이지 타입에 맞는 초기화 함수를 설정하여 새 페이지를 초기화한 뒤 제어를 사용자 프로그램(user program)에
+돌려줍니다. 사용자 프로그램이 실행되다 보면 어느 시점에 프로그램이 자신이 가지고 있다고 믿는 페이지에
+접근하려고 하지만 그 페이지에 아직 내용이 없어서 페이지 폴트가 발생합니다. 폴트 처리 과정에서
+<code>uninit_initialize</code>가 호출되고, 앞서 설정한 초기화 함수를 호출합니다. 익명 페이지의 초기화 함수는
+<code>anon_initializer</code>, 파일 기반 페이지의 초기화 함수는 <code>file_backed_initializer</code>가 됩니다.</p>
+<p>페이지는
+initialize-&gt;(page_fault-&gt;lazy-load-&gt;swap-in&gt;swap-out-&gt;...)-&gt;destroy.
+형태의 생명 주기를 가질 수 있습니다. 생명 주기의 각 전환마다 필요한 절차는 페이지 타입(또는
+<code>VM_TYPE</code>)에 따라 달라지며, 이전 단락은 초기화의 예시였습니다. 이 프로젝트에서는 각 페이지 타입에 대해
+이러한 전환 과정을 구현합니다.</p>
+<h3 id="lazy-loading-for-executable">실행 파일의 지연 로딩(lazy loading)</h3>
+<p>지연 로딩에서는 프로세스(process)가 실행을 시작할 때 즉시 필요한 메모리 부분만 메인 메모리에 로드됩니다.
+이렇게 하면 전체 바이너리 이미지를 한 번에 메모리에 로드하는 즉시 로딩(eager loading)과 비교해 오버헤드를
+줄일 수 있습니다.</p>
+<p>지연 로딩을 지원하기 위해 <code>VM_UNINIT</code>이라는 페이지 타입을 <code>include/vm/vm.h</code>에 도입합니다.
+모든 페이지는 처음에 <code>VM_UNINIT</code> 페이지로 생성됩니다. 또한 미초기화 페이지(uninitialized page)를 위한
+페이지 구조체인 <code>struct uninit_page</code>를 <code>include/vm/uninit.h</code>에 제공합니다.
+미초기화 페이지를 생성, 초기화, 소멸하는 함수는 <code>include/vm/uninit.c</code>에서 찾을 수 있습니다.
+이 함수들은 나중에 완성해야 합니다.</p>
+<p>페이지 폴트(page fault)가 발생하면 페이지 폴트 핸들러(<code>page_fault</code>, <code>userprog/exception.c</code>)가
+제어를 <code>vm_try_handle_fault</code>(<code>vm/vm.c</code>)로 넘기며, 이 함수는 먼저 유효한 페이지 폴트인지
+확인합니다. 여기서 <em>valid</em>는 유효하지 않은 영역에 접근한 폴트를 의미합니다. <em>bogus</em> 폴트라면
+페이지에 일부 내용을 로드하고 사용자 프로그램(user program)에 제어를 반환합니다.</p>
+<p>bogus 페이지 폴트에는 지연 로드된 페이지, 스왑 아웃된 페이지(swapped-out page), 쓰기 보호된 페이지
+(write-protected page)의 세 가지 경우가 있습니다(<a href="cow.html">쓰기 시 복사(Copy-on-Write, Extra)</a> 참조).
+지금은 첫 번째 경우인 지연 로드된 페이지만 고려하십시오. 지연 로딩을 위한 페이지 폴트라면, 커널(kernel)은
+세그먼트를 지연 로드하기 위해 이전에 <code>vm_alloc_page_with_initializer</code>에서 설정한 초기화 함수 중 하나를
+호출합니다. <code>lazy_load_segment</code>를 <code>userprog/process.c</code>에 구현해야 합니다.</p>
+<p><strong><code>vm_alloc_page_with_initializer()</code>를 구현하십시오.</strong>
+전달된 vm_type에 따라 적절한 초기화 함수를 가져와 그것으로 <code>uninit_new</code>를 호출해야 합니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">vm_alloc_page_with_initializer</span> <span class="hljs-params">(<span class="hljs-keyword">enum</span> vm_type type, <span class="hljs-keyword">void</span> *va,
+        <span class="hljs-keyword">bool</span> writable, vm_initializer *init, <span class="hljs-keyword">void</span> *aux)</span></span>;
+</code></pre>
+<blockquote>
+<p>주어진 타입으로 미초기화 페이지를 생성합니다. uninit 페이지의 swap_in 핸들러는 타입에 따라 페이지를
+자동으로 초기화하고, 주어진 AUX로 INIT을 호출합니다. 페이지 구조체를 얻으면 해당 페이지를 프로세스(process)의
+보조 페이지 테이블(supplemental page table)에 삽입하십시오. <code>VM_TYPE</code> 매크로는 <code>vm.h</code>에 정의되어 있으며
+유용할 수 있습니다.</p>
+</blockquote>
+<p>페이지 폴트(page fault) 핸들러는 호출 체인을 따라가고, swap_in을 호출할 때 마침내
+<code>uninit_intialize</code>에 도달합니다. 이에 대한 전체 구현은 제공되어 있습니다. 다만 설계에 따라
+<code>uninit_initialize</code>를 수정해야 할 수도 있습니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">bool</span> <span class="hljs-title">uninit_initialize</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> page *page, <span class="hljs-keyword">void</span> *kva)</span></span>;
+</code></pre>
+<blockquote>
+<p>첫 번째 폴트에서 페이지를 초기화합니다. 템플릿 코드는 먼저 <code>vm_initializer</code>와 <code>aux</code>를 가져온 뒤,
+함수 포인터를 통해 해당 page_initializer를 호출합니다. 설계에 따라 이 함수를 수정해야 할 수도 있습니다.</p>
+</blockquote>
+<p><code>vm_anon_init</code>과 <code>anon_initializer</code>는 필요에 따라 <code>vm/anon.c</code>에서 수정할 수 있습니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">vm_anon_init</span> <span class="hljs-params">(<span class="hljs-keyword">void</span>)</span></span>;
+</code></pre>
+<blockquote>
+<p>익명 페이지(anonymous page) 서브시스템을 초기화합니다. 이 함수에서는 익명 페이지와 관련된 모든 것을
+설정할 수 있습니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">anon_initializer</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> page *page,<span class="hljs-keyword">enum</span> vm_type type, <span class="hljs-keyword">void</span> *kva)</span></span>;
+</code></pre>
+<blockquote>
+<p>이 함수는 먼저 <code>page-&gt;operations</code>에 익명 페이지(anonymous page)의 핸들러를 설정합니다. 현재 빈
+구조체인 <code>anon_page</code>에 일부 정보를 업데이트해야 할 수도 있습니다. 이 함수는 익명 페이지(즉
+<code>VM_ANON</code>)의 초기화 함수로 사용됩니다.</p>
+</blockquote>
+<p><strong><code>load_segment</code>와 <code>lazy_load_segment</code>를 <code>userprog/process.c</code>에 구현하십시오.</strong>
+실행 파일에서 세그먼트 로딩을 구현합니다. 이 모든 페이지는 지연 로드되어야 합니다. 즉, 커널(kernel)이
+이 페이지들에 대한 페이지 폴트(page fault)를 가로챌 때에만 로드됩니다.</p>
+<p>프로그램 로더의 핵심인 <code>load_segment</code>(<code>userprog/process.c</code>) 안의 루프를 수정해야 합니다.
+루프를 한 번 돌 때마다 대기 중인 페이지 객체를 만들기 위해 <code>vm_alloc_page_with_initializer</code>를
+호출합니다. 페이지 폴트가 발생하는 바로 이 시점에 세그먼트가 실제로 파일에서 로드됩니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">bool</span> <span class="hljs-title">load_segment</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> file *file, off_t ofs, uint8_t *upage,
+        uint32_t read_bytes, uint32_t zero_bytes, <span class="hljs-keyword">bool</span> writable)</span></span>;
+</code></pre>
+<blockquote>
+<p>현재 코드는 메인 루프 안에서 파일에서 읽을 바이트 수와 0으로 채울 바이트 수를 계산합니다. 그런 다음
+대기 중인 객체를 만들기 위해 <code>vm_alloc_page_with_initializer</code>를 호출합니다. 보조 값은 <code>aux</code> 인자로
+설정해야 하며, 이 인자는 <code>vm_alloc_page_with_initializer</code>에 전달됩니다. 바이너리를 로드하는 데 필요한
+정보를 담은 구조체를 만들고 싶을 수 있습니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">bool</span> <span class="hljs-title">lazy_load_segment</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> page *page, <span class="hljs-keyword">void</span> *aux)</span></span>;
+</code></pre>
+<blockquote>
+<p><code>lazy_load_segment</code>가 <code>vm_alloc_page_with_initializer</code>의 네 번째 인자로 <code>load_segment</code>에서
+제공된다는 점을 눈치챘을 수 있습니다. 이 함수는 실행 파일 페이지의 초기화 함수이며 페이지 폴트가 발생할 때
+호출됩니다. 페이지 구조체와 <code>aux</code>를 인자로 받습니다. <code>aux</code>는 <code>load_segment</code>에서 설정한 정보입니다.
+이 정보를 사용해 세그먼트를 읽을 파일을 찾아 결국 세그먼트를 메모리로 읽어 와야 합니다.</p>
+</blockquote>
+<p><strong><code>setup_stack</code>을 <code>userprog/process.c</code>에서 조정하여 스택(stack) 할당이 새 메모리 관리
+시스템에 맞게 하십시오.</strong> 첫 번째 스택 페이지는 지연 할당할 필요가 없습니다. 폴트가 발생하기를 기다릴
+필요 없이 로드 시점에 명령줄 인자로 할당하고 초기화할 수 있습니다. 스택을 식별하는 방법을 제공해야 할 수도
+있습니다. 페이지를 표시하기 위해 <code>vm_type</code>(<code>vm/vm.h</code>)의 보조 마커(예: <code>VM_MARKER_0</code>)를
+사용할 수 있습니다.</p>
+<p>마지막으로 <code>vm_try_handle_fault</code> 함수를 수정하여, <code>spt_find_page</code>를 통해 보조 페이지 테이블을
+조회함으로써 폴트가 난 주소에 대응하는 페이지 구조체를 찾도록 하십시오.</p>
+<p>요구사항을 모두 구현하면 fork를 제외한 프로젝트 2의 모든 테스트가 통과해야 합니다.</p>
+<h3 id="supplemental-page-table---revisit">보조 페이지 테이블(supplemental page table) 다시 살펴보기</h3>
+<p>이제 복사와 정리 작업을 지원하기 위해 보조 페이지 테이블(supplemental page table) 인터페이스를 다시
+살펴봅니다. 이 작업들은 프로세스를 생성할 때(더 구체적으로는 자식 프로세스를 만들 때) 또는 프로세스를
+소멸할 때 필요합니다. 자세한 내용은 아래에서 설명합니다. 이 시점에 보조 페이지 테이블을 다시 살펴보는 이유는
+위에서 구현한 초기화 함수 일부를 사용하고 싶을 수 있기 때문입니다.</p>
+<p><strong><code>supplemental_page_table_copy</code>와 <code>supplemental_page_table_kill</code>을
+<code>vm/vm.c</code>에 구현하십시오.</strong></p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">supplemental_page_table_copy</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> supplemental_page_table *dst,
+    <span class="hljs-keyword">struct</span> supplemental_page_table *src)</span></span>;
+</code></pre>
+<blockquote>
+<p>src에서 dst로 보조 페이지 테이블(supplemental page table)을 복사합니다. 이는 자식이 부모의 실행 컨텍스트
+(즉 <code>fork()</code>)를 상속해야 할 때 사용됩니다. src의 보조 페이지 테이블에 있는 각 페이지를 순회하여
+dst의 보조 페이지 테이블에 엔트리를 정확히 복사하십시오. uninit 페이지를 할당하고 즉시 클레임(claim)해야 합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">void</span> <span class="hljs-title">supplemental_page_table_kill</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> supplemental_page_table *spt)</span></span>;
+</code></pre>
+<blockquote>
+<p>보조 페이지 테이블(supplemental page table)이 보유하던 모든 리소스를 해제합니다. 이 함수는 프로세스(process)가
+종료될 때(<code>process_exit()</code>, <code>userprog/process.c</code>) 호출됩니다. 페이지 엔트리를 순회하며 테이블 안의
+페이지들에 대해 <code>destroy(page)</code>를 호출해야 합니다. 이 함수에서는 실제 페이지 테이블(page table)(pml4)과
+물리 메모리(palloc-ed memory)를 걱정할 필요가 없습니다. 호출자가 보조 페이지 테이블을 정리한 뒤 그것들을
+정리합니다.</p>
+</blockquote>
+<h3 id="page-cleanup">페이지 정리(Page Cleanup)</h3>
+<p><strong><code>uninit_destroy</code>를 <code>vm/uninit.c</code>에, <code>anon_destroy</code>를
+<code>vm/anon.c</code>에 구현하십시오.</strong> 이 함수는 미초기화 페이지의 <code>destroy</code> 연산을 처리하는 핸들러입니다.
+미초기화 페이지가 다른 페이지 객체로 변환되더라도, 프로세스(process)가 종료될 때 uninit 페이지가 여전히
+남아 있을 수 있습니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">uninit_destroy</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> page *page)</span></span>;
+</code></pre>
+<blockquote>
+<p>페이지 구조체가 보유하던 리소스를 해제합니다. 페이지의 vm type을 확인하고 그에 맞게 처리하고 싶을 수 있습니다.</p>
+</blockquote>
+<p>지금은 익명 페이지(anonymous page)만 처리하면 됩니다. 나중에 이 함수를 다시 살펴보고 파일 기반 페이지를
+정리하게 됩니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title">anon_destroy</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> page *page)</span></span>;
+</code></pre>
+<blockquote>
+<p>익명 페이지(anonymous page)가 보유하던 리소스를 해제합니다. 페이지 구조체를 명시적으로 해제할 필요는
+없습니다. 호출자가 수행해야 합니다.</p>
+</blockquote>
+<p>이제 프로젝트 2의 모든 테스트가 통과해야 합니다.</p>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title">일치하는 결과 <span class="search-results-count"></span>개: "<span class="search-query"></span>"</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">일치하는 결과가 없습니다: "<span class="search-query"></span>"</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="vm_management.html" class="navigation navigation-prev " aria-label="이전 페이지: 메모리 관리">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="stack_growth.html" class="navigation navigation-next " aria-label="다음 페이지: 스택 증가(Stack Growth)">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Anonymous Page","level":"4.3","depth":1,"next":{"title":"Stack Growth","level":"4.4","depth":1,"path":"project3/stack_growth.md","ref":"project3/stack_growth.md","articles":[]},"previous":{"title":"Memory Management","level":"4.2","depth":1,"path":"project3/vm_management.md","ref":"project3/vm_management.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":[],"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"}},"file":{"path":"project3/anon.md","mtime":"2022-05-23T14:07:34.312Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2022-05-23T14:13:22.147Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    <script src="../gitbook/file-navigation.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/search_index_ko.js"></script>
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+    </body>
+</html>

@@ -1,0 +1,822 @@
+
+<!DOCTYPE HTML>
+<html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+        <title>하위 디렉터리와 소프트 링크 · GitBook</title>
+        <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+        <meta name="description" content="">
+        <meta name="generator" content="GitBook 3.2.3">
+        
+        
+        
+    
+    <link rel="stylesheet" href="../gitbook/style.css">
+
+    
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-highlight/website.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-search/search.css">
+                
+            
+                
+                <link rel="stylesheet" href="../gitbook/gitbook-plugin-fontsettings/website.css">
+                
+            
+        
+
+    
+
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+        
+    
+
+        
+    
+    
+    <meta name="HandheldFriendly" content="true"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <link rel="apple-touch-icon-precomposed" sizes="152x152" href="../gitbook/images/apple-touch-icon-precomposed-152.png">
+    <link rel="shortcut icon" href="../gitbook/images/favicon.ico" type="image/x-icon">
+
+    
+    <link rel="next" href="buffer_cache.html"/>
+    
+    
+    <link rel="prev" href="indexed_and_extensible_files.html"/>
+    
+
+    </head>
+    <body>
+        
+<div class="book">
+    <div class="book-summary">
+        
+            
+<div id="book-search-input" role="search">
+    <input type="text" placeholder="검색어를 입력하세요"/>
+</div>
+
+            
+                <nav role="navigation">
+                
+
+
+<ul class="summary">
+    
+    
+
+    
+
+    
+        
+        <li class="header">소개</li>
+        
+        
+    
+        <li class="chapter " data-level="1.1" data-path="../">
+            
+                <a href="../index.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.2" data-path="../introduction/getting_started.html">
+            
+                <a href="../introduction/getting_started.html">
+            
+                    
+                    시작하기
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.3" data-path="../introduction/grading.html">
+            
+                <a href="../introduction/grading.html">
+            
+                    
+                    채점
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="1.4" data-path="../introduction/legal_and_ethical_issues.html">
+            
+                <a href="../introduction/legal_and_ethical_issues.html">
+            
+                    
+                    법적 및 윤리적 문제
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 1: 스레드(Threads)</li>
+        
+        
+    
+        <li class="chapter " data-level="2.1" data-path="../project1/introduction.html">
+            
+                <a href="../project1/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.2" data-path="../project1/alarm_clock.html">
+            
+                <a href="../project1/alarm_clock.html">
+            
+                    
+                    알람 시계(Alarm Clock)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.3" data-path="../project1/priority_scheduling.html">
+            
+                <a href="../project1/priority_scheduling.html">
+            
+                    
+                    우선순위 스케줄링(Priority Scheduling)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.4" data-path="../project1/advanced_scheduler.html">
+            
+                <a href="../project1/advanced_scheduler.html">
+            
+                    
+                    고급 스케줄러(Advanced Scheduler)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="2.5" data-path="../project1/FAQ.html">
+            
+                <a href="../project1/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 2: 사용자 프로그램(User Programs)</li>
+        
+        
+    
+        <li class="chapter " data-level="3.1" data-path="../project2/introduction.html">
+            
+                <a href="../project2/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.2" data-path="../project2/argument_passing.html">
+            
+                <a href="../project2/argument_passing.html">
+            
+                    
+                    인자 전달(Argument Passing)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.3" data-path="../project2/user_memory.html">
+            
+                <a href="../project2/user_memory.html">
+            
+                    
+                    사용자 메모리(User Memory)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.4" data-path="../project2/system_call.html">
+            
+                <a href="../project2/system_call.html">
+            
+                    
+                    시스템 콜(System Calls)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.5" data-path="../project2/process_termination.html">
+            
+                <a href="../project2/process_termination.html">
+            
+                    
+                    프로세스 종료 메시지
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.6" data-path="../project2/deny_write.html">
+            
+                <a href="../project2/deny_write.html">
+            
+                    
+                    실행 파일 쓰기 거부
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.7" data-path="../project2/dup.html">
+            
+                <a href="../project2/dup.html">
+            
+                    
+                    파일 디스크립터 확장(Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="3.8" data-path="../project2/FAQ.html">
+            
+                <a href="../project2/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 3: 가상 메모리(Virtual Memory)</li>
+        
+        
+    
+        <li class="chapter " data-level="4.1" data-path="../project3/introduction.html">
+            
+                <a href="../project3/introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.2" data-path="../project3/vm_management.html">
+            
+                <a href="../project3/vm_management.html">
+            
+                    
+                    메모리 관리
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.3" data-path="../project3/anon.html">
+            
+                <a href="../project3/anon.html">
+            
+                    
+                    익명 페이지(Anonymous Page)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.4" data-path="../project3/stack_growth.html">
+            
+                <a href="../project3/stack_growth.html">
+            
+                    
+                    스택 증가(Stack Growth)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.5" data-path="../project3/memory_mapped_files.html">
+            
+                <a href="../project3/memory_mapped_files.html">
+            
+                    
+                    메모리 매핑 파일(Memory Mapped Files)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.6" data-path="../project3/swapping.html">
+            
+                <a href="../project3/swapping.html">
+            
+                    
+                    스왑 인/아웃(Swap In/Out)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.7" data-path="../project3/cow.html">
+            
+                <a href="../project3/cow.html">
+            
+                    
+                    쓰기 시 복사(Copy-on-Write, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="4.8" data-path="../project3/FAQ.html">
+            
+                <a href="../project3/FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">프로젝트 4: 파일 시스템(File System)</li>
+        
+        
+    
+        <li class="chapter " data-level="5.1" data-path="introduction.html">
+            
+                <a href="introduction.html">
+            
+                    
+                    소개
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.2" data-path="indexed_and_extensible_files.html">
+            
+                <a href="indexed_and_extensible_files.html">
+            
+                    
+                    인덱스 기반 확장 가능 파일
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter active" data-level="5.3" data-path="subdirectories.html">
+            
+                <a href="subdirectories.html">
+            
+                    
+                    하위 디렉터리와 소프트 링크
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.4" data-path="buffer_cache.html">
+            
+                <a href="buffer_cache.html">
+            
+                    
+                    버퍼 캐시(Buffer Cache, Extra)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.5" data-path="synchronization.html">
+            
+                <a href="synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="5.6" data-path="FAQ.html">
+            
+                <a href="FAQ.html">
+            
+                    
+                    자주 묻는 질문
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+        
+        <li class="header">부록</li>
+        
+        
+    
+        <li class="chapter " data-level="6.1" data-path="../appendix/threads.html">
+            
+                <a href="../appendix/threads.html">
+            
+                    
+                    스레드(Threads)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.2" data-path="../appendix/synchronization.html">
+            
+                <a href="../appendix/synchronization.html">
+            
+                    
+                    동기화(Synchronization)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.3" data-path="../appendix/memory_allocation.html">
+            
+                <a href="../appendix/memory_allocation.html">
+            
+                    
+                    메모리 할당
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.4" data-path="../appendix/virtual_address.html">
+            
+                <a href="../appendix/virtual_address.html">
+            
+                    
+                    가상 주소(Virtual Address)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.5" data-path="../appendix/page_table.html">
+            
+                <a href="../appendix/page_table.html">
+            
+                    
+                    페이지 테이블(Page Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.6" data-path="../appendix/debugging_tools.html">
+            
+                <a href="../appendix/debugging_tools.html">
+            
+                    
+                    디버깅 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.7" data-path="../appendix/development_tools.html">
+            
+                <a href="../appendix/development_tools.html">
+            
+                    
+                    개발 도구
+            
+                </a>
+            
+
+            
+        </li>
+    
+        <li class="chapter " data-level="6.8" data-path="../appendix/hash_table.html">
+            
+                <a href="../appendix/hash_table.html">
+            
+                    
+                    해시 테이블(Hash Table)
+            
+                </a>
+            
+
+            
+        </li>
+    
+
+    
+
+    <li class="divider"></li>
+
+    <li>
+        <a href="https://www.gitbook.com" target="blank" class="gitbook-link">
+            GitBook으로 게시됨
+        </a>
+    </li>
+</ul>
+
+
+                </nav>
+            
+        
+    </div>
+
+    <div class="book-body">
+        
+            <div class="body-inner">
+                
+                    
+
+<div class="book-header" role="navigation">
+    
+
+    <!-- Title -->
+    <h1>
+        <i class="fa fa-circle-o-notch fa-spin"></i>
+        <a href="../index.html">하위 디렉터리와 소프트 링크</a>
+    </h1>
+</div>
+
+
+
+
+                    <div class="page-wrapper" tabindex="-1" role="main">
+                        <div class="page-inner">
+                            
+<div id="book-search-results">
+    <div class="search-noresults">
+    
+                                <section class="normal markdown-section">
+                                
+                                <h3 id="subdirectories">하위 디렉터리(Subdirectories)</h3>
+<p><strong>계층적 이름 공간(hierarchical name space)을 구현하십시오.</strong>
+기본 파일 시스템에서는 모든 파일이 하나의 디렉터리(directory)에 들어 있습니다. 디렉터리(directory) 엔트리가 파일이나 다른 디렉터리(directory)를 가리킬 수 있도록 이를 수정하십시오.</p>
+<p>다른 파일과 마찬가지로 디렉터리(directory)도 원래 크기를 넘어 확장될 수 있어야 합니다.</p>
+<p>기본 파일 시스템은 파일 이름을 14자로 제한합니다. 개별 파일 이름 구성 요소에 대해서는 이 제한을 유지해도 되고, 원한다면 확장해도 됩니다. 전체 경로 이름은 반드시 14자보다 훨씬 길어질 수 있어야 합니다.</p>
+<p><strong>각 프로세스(process)마다 별도의 현재 디렉터리(current directory)를 유지하십시오.</strong>
+시작 시 초기 프로세스(process)의 현재 디렉터리(current directory)를 루트로 설정하십시오. 한 프로세스(process)가 fork 시스템 콜(system call)로 다른 프로세스를 시작하면, 자식 프로세스(process)는 부모의 현재 디렉터리(current directory)를 상속합니다. 그 후에는 두 프로세스(process)의 현재 디렉터리(current directory)가 서로 독립적이므로, 어느 한쪽이 자신의 현재 디렉터리(current directory)를 변경해도 다른 쪽에는 영향을 주지 않습니다. (이것이 Unix에서 cd 명령이 외부 프로그램이 아니라 셸 내장 명령인 이유입니다.)</p>
+<p>호출자가 파일 이름을 제공하는 기존 시스템 콜(system call)들을 갱신하여, 어디에서든 절대 경로 이름이나 상대 경로 이름을 사용할 수 있게 하십시오. 디렉터리(directory) 구분 문자는 슬래시(&apos;/&apos;)입니다. 또한 Unix에서와 같은 의미를 갖는 특수 파일 이름 &apos;.&apos; 및 &apos;..&apos;도 반드시 지원해야 합니다.</p>
+<p><code>open</code> 시스템 콜(system call)을 갱신하여 디렉터리(directory)도 열 수 있게 하십시오. 기존 시스템 콜(system call) 중에서는 close만 디렉터리(directory)에 대한 파일 디스크립터(file descriptor)를 받을 수 있으면 됩니다.</p>
+<p><code>remove</code> 시스템 콜(system call)을 갱신하여 일반 파일뿐 아니라 빈 디렉터리(directory)(루트 제외)도 삭제할 수 있게 하십시오. 디렉터리(directory)는 파일이나 하위 디렉터리(subdirectory)(&apos;.&apos; 및 &apos;..&apos; 제외)를 전혀 포함하지 않을 때만 삭제할 수 있습니다. 프로세스(process)가 열어 두었거나 프로세스의 현재 작업 디렉터리(current working directory)로 사용 중인 디렉터리(directory)의 삭제를 허용할지는 여러분이 결정할 수 있습니다. 이를 허용한다면, 삭제된 디렉터리(directory) 안에서 파일(&apos;.&apos; 및 &apos;..&apos; 포함)을 열거나 새 파일을 만드는 시도는 반드시 허용되지 않아야 합니다.
+다음 새 시스템 콜(system call)들을 구현하십시오:</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">chdir</span> <span class="hljs-params">(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *dir)</span></span>;
+</code></pre>
+<blockquote>
+<p>프로세스(process)의 현재 작업 디렉터리(current working directory)를 dir로 변경합니다. dir는 상대 경로일 수도 있고 절대 경로일 수도 있습니다. 성공하면 true를, 실패하면 false를 반환합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">mkdir</span> <span class="hljs-params">(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *dir)</span></span>;
+</code></pre>
+<blockquote>
+<p>dir라는 이름의 디렉터리(directory)를 만듭니다. dir는 상대 경로일 수도 있고 절대 경로일 수도 있습니다. 성공하면 true를, 실패하면 false를 반환합니다. dir가 이미 존재하거나, dir 안의 디렉터리(directory) 이름 중 마지막을 제외한 어떤 이름이라도 아직 존재하지 않으면 실패합니다. 즉, <code>mkdir(&quot;/a/b/c&quot;)</code>는 <code>/a/b</code>가 이미 존재하고 <code>/a/b/c</code>가 존재하지 않을 때만 성공합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">readdir</span> <span class="hljs-params">(<span class="hljs-keyword">int</span> fd, <span class="hljs-keyword">char</span> *name)</span></span>;
+</code></pre>
+<blockquote>
+<p>디렉터리(directory)를 나타내야 하는 파일 디스크립터(file descriptor) fd에서 디렉터리(directory) 엔트리를 읽습니다. 성공하면 널 종료 파일 이름을 name에 저장하고 true를 반환합니다. name에는 <code>READDIR_MAX_LEN + 1</code>바이트를 담을 공간이 있어야 합니다. 디렉터리(directory)에 남은 엔트리가 없으면 false를 반환합니다.</p>
+<p>. 및 ..은 <code>readdir</code>에서 반환되어서는 안 됩니다.
+디렉터리(directory)가 열린 동안 변경되면, 일부 엔트리가 전혀 읽히지 않거나 여러 번 읽히는 것도 허용됩니다. 그렇지 않다면 각 디렉터리(directory) 엔트리는 어떤 순서로든 한 번씩 읽혀야 합니다.</p>
+<p><code>READDIR_MAX_LEN</code>는 <code>lib/user/syscall.h</code>에 정의되어 있습니다. 여러분의 파일 시스템이 기본 파일 시스템보다 더 긴 파일 이름을 지원한다면, 이 값을 기본값 14에서 늘려야 합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">bool</span> <span class="hljs-title">isdir</span> <span class="hljs-params">(<span class="hljs-keyword">int</span> fd)</span></span>;
+</code></pre>
+<blockquote>
+<p>fd가 디렉터리(directory)를 나타내면 true를 반환하고, 일반 파일을 나타내면 false를 반환합니다.</p>
+</blockquote>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">inumber</span> <span class="hljs-params">(<span class="hljs-keyword">int</span> fd)</span></span>;
+</code></pre>
+<blockquote>
+<p>fd와 연결된 아이노드(inode)의 아이노드(inode) 번호를 반환합니다. fd는 일반 파일이나 디렉터리(directory)를 나타낼 수 있습니다.</p>
+<p>아이노드(inode) 번호는 파일이나 디렉터리(directory)를 지속적으로 식별합니다. 파일이 존재하는 동안 고유합니다. Pintos에서는 아이노드(inode)의 섹터 번호가 아이노드(inode) 번호로 사용하기에 적합합니다.</p>
+</blockquote>
+<h3 id="soft-link">소프트 링크(Soft Link)</h3>
+<p><strong>Pintos에서 소프트 링크(soft link) 메커니즘을 구현하십시오.</strong>
+소프트 링크(soft link)(기호 링크(symbolic link)라고도 함)는 다른 파일이나 디렉터리(directory)를 참조하는 의사 파일 객체입니다. 이 파일에는 가리키는 파일의 경로 정보가 절대 경로나 상대 경로 형태로 들어 있습니다. 다음 상황을 가정해 봅시다:</p>
+<pre><code>/
+&#x251C;&#x2500;&#x2500; a
+&#x2502;   &#x251C;&#x2500;&#x2500; link1 -&gt; /file
+&#x2502;   &#x2502;
+&#x2502;   &#x2514;&#x2500;&#x2500; link2 -&gt; ../file
+&#x2514;&#x2500;&#x2500; file
+</code></pre><p>이름이 <code>link1</code>인 <code>/a</code> 안의 소프트 링크(soft link)는 <code>/file</code>(절대 경로)을 가리키고,
+<code>link2</code>는 <code>/a</code> 안에서 <code>../file</code>(상대 경로)을 가리킵니다.
+<code>link1</code> 또는 <code>link2</code> 파일을 읽는 것은 <code>/file</code>을 읽는 것과 같습니다.</p>
+<hr>
+<pre><code class="lang-C"><span class="hljs-function"><span class="hljs-keyword">int</span> <span class="hljs-title">symlink</span> <span class="hljs-params">(<span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *target, <span class="hljs-keyword">const</span> <span class="hljs-keyword">char</span> *linkpath)</span></span>;
+</code></pre>
+<blockquote>
+<p>문자열 target을 포함하는 linkpath라는 이름의 기호 링크(symbolic link)를 만듭니다.
+성공하면 0을 반환합니다. 그렇지 않으면 -1을 반환합니다.</p>
+</blockquote>
+
+                                
+                                </section>
+                            
+    </div>
+    <div class="search-results">
+        <div class="has-results">
+            
+            <h1 class="search-results-title"><span class="search-results-count"></span>개의 결과가 "<span class="search-query"></span>"와 일치합니다</h1>
+            <ul class="search-results-list"></ul>
+            
+        </div>
+        <div class="no-results">
+            
+            <h1 class="search-results-title">"<span class="search-query"></span>"와 일치하는 결과가 없습니다</h1>
+            
+        </div>
+    </div>
+</div>
+
+                        </div>
+                    </div>
+                
+            </div>
+
+            
+                
+                <a href="indexed_and_extensible_files.html" class="navigation navigation-prev " aria-label="이전 페이지: 인덱스 기반 확장 가능 파일">
+                    <i class="fa fa-angle-left"></i>
+                </a>
+                
+                
+                <a href="buffer_cache.html" class="navigation navigation-next " aria-label="다음 페이지: 버퍼 캐시(Buffer Cache, Extra)">
+                    <i class="fa fa-angle-right"></i>
+                </a>
+                
+            
+        
+    </div>
+
+    <script>
+        var gitbook = gitbook || [];
+        gitbook.push(function() {
+            gitbook.page.hasChanged({"page":{"title":"Subdirectories and Soft Links","level":"5.3","depth":1,"next":{"title":"Buffer Cache (Extra)","level":"5.4","depth":1,"path":"project4/buffer_cache.md","ref":"project4/buffer_cache.md","articles":[]},"previous":{"title":"Indexed and Extensible Files","level":"5.2","depth":1,"path":"project4/indexed_and_extensible_files.md","ref":"project4/indexed_and_extensible_files.md","articles":[]},"dir":"ltr"},"config":{"gitbook":"*","theme":"default","variables":{},"plugins":[],"pluginsConfig":{"highlight":{},"search":{},"lunr":{"maxIndexSize":1000000,"ignoreSpecialCharacters":false},"sharing":{"facebook":true,"twitter":true,"google":false,"weibo":false,"instapaper":false,"vk":false,"all":["facebook","google","twitter","weibo","instapaper"]},"fontsettings":{"theme":"white","family":"sans","size":2},"theme-default":{"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"},"showLevel":false}},"structure":{"langs":"LANGS.md","readme":"README.md","glossary":"GLOSSARY.md","summary":"SUMMARY.md"},"pdf":{"pageNumbers":true,"fontSize":12,"fontFamily":"Arial","paperSize":"a4","chapterMark":"pagebreak","pageBreaksBefore":"/","margin":{"right":62,"left":62,"top":56,"bottom":56}},"styles":{"website":"styles/website.css","pdf":"styles/pdf.css","epub":"styles/epub.css","mobi":"styles/mobi.css","ebook":"styles/ebook.css","print":"styles/print.css"}},"file":{"path":"project4/subdirectories.md","mtime":"2022-05-23T14:07:34.324Z","type":"markdown"},"gitbook":{"version":"3.2.3","time":"2022-05-23T14:13:22.147Z"},"basePath":"..","book":{"language":""}});
+        });
+    </script>
+</div>
+
+        
+    <script src="../gitbook/gitbook.js"></script>
+    <script src="../gitbook/theme.js"></script>
+    <script src="../gitbook/file-navigation.js"></script>
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search-engine.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-search/search.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-lunr/lunr.min.js"></script>
+        
+    
+        
+        <script src="../gitbook/search_index_ko.js"></script>
+        <script src="../gitbook/gitbook-plugin-lunr/search-lunr.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-sharing/buttons.js"></script>
+        
+    
+        
+        <script src="../gitbook/gitbook-plugin-fontsettings/fontsettings.js"></script>
+    </body>
+</html>
