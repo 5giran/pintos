@@ -1,6 +1,8 @@
 #ifndef VM_VM_H
 #define VM_VM_H
 #include <stdbool.h>
+#include "lib/kernel/hash.h"
+#include "lib/kernel/list.h"
 #include "threads/palloc.h"
 
 enum vm_type {
@@ -46,7 +48,10 @@ struct page {
 	void *va;              /* user space 기준 주소 */
 	struct frame *frame;   /* frame을 가리키는 역참조 */
 
-	/* 여러분의 구현 */
+	/* SPT ownership:
+	 * 각 page는 정확히 한 supplemental_page_table의 pages hash에 들어간다.
+	 * key는 page-aligned user va이며, 이 elem은 hash 삭제 뒤에만 재사용된다. */
+	struct hash_elem spt_elem;
 
 	/* 타입별 데이터는 union에 묶여 있다.
 	 * 각 함수는 현재 union을 자동으로 감지한다. */
@@ -64,6 +69,9 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	/* 이후 eviction 정책에서 frame table 순회에 사용할 hook.
+	 * 이번 refactor에서는 필드만 고정하고 eviction 구현은 Project 3 단계로 남긴다. */
+	struct list_elem frame_elem;
 };
 
 /* page 연산을 위한 함수 테이블.
@@ -86,6 +94,10 @@ struct page_operations {
  * 이 struct의 설계를 특정 방식으로 강제하고 싶지는 않다.
  * 설계는 전부 여러분에게 달려 있다. */
 struct supplemental_page_table {
+	/* Process-owned virtual page map.
+	 * key: page->va rounded down to page boundary
+	 * value: struct page through page.spt_elem */
+	struct hash pages;
 };
 
 #include "threads/thread.h"
