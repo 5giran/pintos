@@ -5,10 +5,14 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h" /* child_status 내부의 semaphore 사용을 위해 */
 #ifdef VM
 #include "vm/vm.h"
 #endif
 
+struct file;            /* struct file의 전방 선언 */
+
+#define FD_MAX 128		/* 프로세스당 가질 수 있는 최대 파일 디스크립터 개수 */
 
 /* thread 생명 주기의 상태들. */
 enum thread_status {
@@ -22,6 +26,24 @@ enum thread_status {
    원하는 타입으로 재정의해도 된다. */
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* tid_t의 오류 값. */
+
+#ifdef USERPROG
+/* parent와 child가 공유하는 process lifecycle record.
+ * record 객체는 struct thread 안에 값으로 넣지 않고, process.c에서
+ * malloc()으로 별도 할당해 parent/child가 pointer로 공유한다. */
+struct child_status {
+	tid_t tid;                    /* child thread id */
+	int exit_status;              /* child의 종료 status */
+	bool has_exited;              /* child가 이미 종료되었는지 여부 */
+	bool has_been_waited;         /* parent가 wait 권한을 이미 사용했는지 여부 */
+	int ref_cnt;                  /* parent 몫 1 + child 몫 1, 둘 다 release하면 free */
+
+	struct semaphore wait_sema;   /* child exit 전 parent가 wait할 semaphore */
+	struct list_elem elem;        /* parent->children list에 연결할 elem */
+};
+
+struct file;
+#endif
 
 /* thread priority(스레드 우선순위). */
 #define PRI_MIN 0                       /* 가장 낮은 priority. */
@@ -102,6 +124,14 @@ struct thread {
 #ifdef USERPROG
 	/* userprog/process.c가 소유한다. */
 	uint64_t *pml4;                     /* PML4 테이블 */
+	int exit_status;										/* syscall exit status */
+
+	struct list children;								/* 현재 thread가 생성한 direct child들의 child status record 목록 (요소 자체가 child_status) */
+	struct child_status *child_status;  /* 현재 thread의 parent에게 넘길 현재 thread의 record */
+
+	struct file *running_file;					/* 현재 thread가 load 하고 실행하고 있는 file */
+	struct file *fd_table[FD_MAX];     	/* 프로세스별 파일 디스크립터 테이블 */
+	int next_fd;                       	/* 다음 할당 후보 fd */
 #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */
@@ -109,7 +139,10 @@ struct thread {
 #endif
 
 	/* thread.c가 소유한다. */
-	struct intr_frame tf;               /* 전환에 필요한 정보. */
+	/* Context Switching 에 필요한 정보, CPU 상태를 저장해둔 구조체 
+	 * CPU가 나중에 다시 실행을 이어가기 위해 필요한 레지스터 묶음 (세이브 파일이라 생각하면 편하다)
+	*/
+	struct intr_frame tf;               
 	unsigned magic;                     /* stack overflow를 감지한다. */
 };
 
