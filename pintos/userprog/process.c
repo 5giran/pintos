@@ -31,6 +31,9 @@ static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens[]);
 static void initd (void *f_name);
 static void __do_fork (void *);
+static void running_file_close (struct thread *t);
+static void running_file_install (struct thread *t, struct file *file);
+static bool running_file_duplicate (struct thread *dst, struct thread *src);
 
 struct fork_aux {
 	struct thread *parent;
@@ -94,15 +97,23 @@ child_status_find (struct thread *parent, tid_t child_tid) {
 /* child_status_release () */
 static void
 child_status_release (struct child_status *cs) {
+	bool should_free;
+	enum intr_level old_level;
+
 	/* record가 NULL이면 이미 메모리 해제된 것이므로 바로 return */
 	if (cs == NULL) {
 		return;
 	}
+
+	old_level = intr_disable ();
 	ASSERT(cs->ref_cnt > 0);
 	/* 이 record의 참조 수를 1 감소시킨다. */
 	cs->ref_cnt--;
 	/* ref_cnt가 0이면 malloc으로 할당 받았던 record의 memory를 free */
-	if (cs->ref_cnt == 0) {
+	should_free = cs->ref_cnt == 0;
+	intr_set_level (old_level);
+
+	if (should_free) {
 		free(cs);
 	}
 }
@@ -119,6 +130,48 @@ process_init (void)
 {
 	struct thread *current = thread_current();
 	fd_init (current);
+}
+
+/* running_file은 fd table과 별개의 실행 파일 lifetime record다.
+ * file_deny_write()는 file object가 닫힐 때 풀리므로, exec 성공부터
+ * process cleanup까지 file을 열어 둔다는 invariant를 이 helper들에 모은다. */
+static void
+running_file_close (struct thread *t)
+{
+	if (t->running_file == NULL)
+		return;
+
+	lock_acquire (&filesys_lock);
+	file_close (t->running_file);
+	lock_release (&filesys_lock);
+	t->running_file = NULL;
+}
+
+static void
+running_file_install (struct thread *t, struct file *file)
+{
+	ASSERT (t->running_file == NULL);
+	ASSERT (file != NULL);
+
+	lock_acquire (&filesys_lock);
+	file_deny_write (file);
+	lock_release (&filesys_lock);
+	t->running_file = file;
+}
+
+static bool
+running_file_duplicate (struct thread *dst, struct thread *src)
+{
+	ASSERT (dst->running_file == NULL);
+
+	if (src->running_file == NULL)
+		return true;
+
+	lock_acquire (&filesys_lock);
+	dst->running_file = file_duplicate (src->running_file);
+	lock_release (&filesys_lock);
+
+	return dst->running_file != NULL;
 }
 
 /* FILE_NAME command line으로 첫 user process를 시작할 kernel thread를 만든다.
@@ -381,6 +434,9 @@ __do_fork (void *aux)
 	if (!fd_duplicate_all (current, parent))
 		goto error;
 
+	if (!running_file_duplicate (current, parent))
+		goto error;
+
 	/* child 입장에서는 fork()의 반환값이 0이어야 한다. */
 	if_.R.rax = 0;
 
@@ -531,13 +587,7 @@ process_exit (void)
 	 * TODO: 프로세스 종료 메시지를 구현하세요(참고:
 	 * TODO: project2/process_termination.html).
 	 * TODO: 여기서 프로세스 자원 정리를 구현하는 것을 권장합니다. */
-	if (curr->running_file != NULL) {
-		lock_acquire (&filesys_lock);
-		file_allow_write (curr->running_file);
-		file_close (curr->running_file);
-		lock_release (&filesys_lock);
-		curr->running_file = NULL;
-	}
+	running_file_close (curr);
 
 	/* 유저 프로세스의 thread라면 종료 메시지 출력, pure kernel thread면 메시지 출력 X 
 	 * 유저 프로세스라면 pml4(페이지 테이블)가 존재한다.
@@ -570,10 +620,7 @@ static void
 process_cleanup (void)
 {
 	struct thread *curr = thread_current ();
-	if (curr->running_file != NULL) {
-		file_close (curr->running_file); // 내부에서 file_allow_write() 호출
-		curr->running_file = NULL;
-	}
+	running_file_close (curr);
 
 #ifdef VM
 	supplemental_page_table_kill (&curr->spt);
@@ -670,6 +717,30 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 						 uint32_t read_bytes, uint32_t zero_bytes,
 						 bool writable);
 
+static bool
+read_file_exact_at (struct file *file, void *buffer, off_t size, off_t ofs)
+{
+	off_t bytes_read;
+
+	lock_acquire (&filesys_lock);
+	bytes_read = file_read_at (file, buffer, size, ofs);
+	lock_release (&filesys_lock);
+
+	return bytes_read == size;
+}
+
+static off_t
+file_length_synchronized (struct file *file)
+{
+	off_t length;
+
+	lock_acquire (&filesys_lock);
+	length = file_length (file);
+	lock_release (&filesys_lock);
+
+	return length;
+}
+
 /* FILE_NAME에서 ELF 실행 파일을 현재 스레드에 로드합니다.
  * 실행 파일의 진입점을 *RIP에 저장하고 초기 스택 포인터를 *RSP에 저장합니다.
  * 성공하면 true, 그렇지 않으면 false를 반환합니다. */
@@ -716,15 +787,13 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
  	 * "어떤 아키텍처용인지",
  	 * "program header가 어디에 몇 개 있는지" 같은 정보가 들어 있습니다.
 	*/
-	lock_acquire (&filesys_lock);
-	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
+	if (!read_file_exact_at (file, &ehdr, sizeof ehdr, 0)
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2
 			|| ehdr.e_machine != 0x3E
 			|| ehdr.e_version != 1
 			|| ehdr.e_phentsize != sizeof (struct Phdr)
 			|| ehdr.e_phnum > 1024) {
-		lock_release (&filesys_lock);
 		printf ("load: %s: error loading executable\n", argv_tokens[0]);
 		goto done;
 	}
@@ -739,7 +808,6 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
  	 * 모든 header가 실제로 메모리에 올라가는 것은 아니고,
  	 * PT_LOAD 타입인 header만 실제 코드/데이터 세그먼트로 메모리에 적재됩니다.
  	 */
-	lock_release (&filesys_lock);
 	file_ofs = ehdr.e_phoff;
 
 	/* 각 프로그램 헤더를 순회하며 메모리에 적재할 세그먼트를 찾는다. */
@@ -747,19 +815,13 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 		struct Phdr phdr;
 
 		/* program header를 읽을 위치가 파일 범위를 벗어나면 잘못된 ELF입니다. */
-		if (file_ofs < 0 || file_ofs > file_length (file))
+		if (file_ofs < 0 || file_ofs > file_length_synchronized (file))
 			goto done;
 
-		/* 현재 program header 위치로 이동합니다. */
-		lock_acquire (&filesys_lock);
-		file_seek (file, file_ofs);
-
-		/* 프로그램 헤더 1개 읽기 */
-		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr) {
-			lock_release (&filesys_lock);
+		/* program header도 file position을 움직이지 않고 offset 기준으로 읽는다. */
+		if (!read_file_exact_at (file, &phdr, sizeof phdr, file_ofs))
 			goto done;
-		}
-		lock_release (&filesys_lock);
+
 		/* 다음 헤더 위치로 이동 */
 		file_ofs += sizeof phdr;
 
@@ -866,8 +928,9 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	*/
 	if_->rip = ehdr.e_entry;
 
-	/* TODO: 여기에 코드를 작성하세요.
-	 * TODO: 인자 전달을 구현하세요(참고: project2/argument_passing.html). */
+	/* Argument passing은 load()가 만든 첫 stack page 안에서 끝낸다.
+	 * Project 3에서도 setup_stack()이 즉시 claim한 첫 stack page 위에
+	 * 같은 layout을 유지하면 syscall ABI를 바꾸지 않고 이어갈 수 있다. */
 	uintptr_t rsp = if_->rsp;
 
 	/* 스택에 인자 문자열 자체를 먼저 복사해 역순으로 push */
@@ -884,12 +947,12 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	/* rsp는 원래 uintptr_t 타입이므로, rsp를 8로 나눈 나머지를 원래 rsp에서 빼주면 8의 배수로 내림 정렬이 된다.*/
 	rsp -= (rsp % 8);
 	if (rsp < USER_STACK - PGSIZE) {
-			goto done;
+		goto done;
 	}
 	/* NULL pointer 크기 만큼 rsp 내려감 */
 	rsp -= 8;
 	if (rsp < USER_STACK - PGSIZE) {
-			goto done;
+		goto done;
 	}
 	/* argv[argc] = NULL 
 	 * uintptr_t는 주소를 담을 수 있는 정수 타입이다.
@@ -915,7 +978,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 	rsp -= 8;
 	if (rsp < USER_STACK - PGSIZE) {
-			goto done;
+		goto done;
 	}
 	/* fake return address */
 	*(uintptr_t *) rsp = 0;
@@ -925,16 +988,8 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	if_->R.rsi = (uint64_t) argv_addr;
 
 	success = true;
-	file_deny_write (file);
-	t->running_file = file;
-
-	if (success) {
-		lock_acquire (&filesys_lock);
-		file_deny_write (file);
-		lock_release (&filesys_lock);
-		t->running_file = file;
-		file = NULL;
-	}
+	running_file_install (t, file);
+	file = NULL;
 	
 done:
 	/* 로드가 성공하든 실패하든 여기로 옵니다. */
@@ -962,7 +1017,7 @@ validate_segment (const struct Phdr *phdr, struct file *file)
 		return false;
 
 	/* p_offset은 FILE 내부를 가리켜야 합니다. */
-	if (phdr->p_offset > (uint64_t)file_length (file))
+	if (phdr->p_offset > (uint64_t) file_length_synchronized (file))
 		return false;
 
 	/* p_memsz는 p_filesz보다 적어도 커야 합니다. */
@@ -1024,7 +1079,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT (pg_ofs(upage) == 0);
 	ASSERT (ofs % PGSIZE == 0);
 
-	file_seek (file, ofs);
 	while (read_bytes > 0 || zero_bytes > 0)
 	{
 		/* 이 페이지를 어떻게 채울지 계산하세요.
@@ -1039,7 +1093,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 			return false;
 
 		/* 이 페이지를 로드합니다. 실행 파일 내용을 일단 커널이 접근 가능한 메모리에 읽어옴  */
-		if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes) {
+		if (!read_file_exact_at (file, kpage, page_read_bytes, ofs)) {
 			palloc_free_page (kpage);
 			return false;
 		}
@@ -1058,6 +1112,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -1101,6 +1156,13 @@ install_page (void *upage, void *kpage, bool writable)
 /* 여기부터의 코드는 project 3 이후에 사용됩니다.
  * 함수를 project 2에만 구현하고 싶다면 위쪽 블록에 구현하세요. */
 
+struct lazy_load_segment_aux {
+	struct file *file;             /* page fault 때 읽을 executable 또는 mmap file */
+	off_t ofs;                     /* file_read_at()에 넘길 page별 시작 offset */
+	size_t page_read_bytes;        /* 파일에서 채울 byte 수 */
+	size_t page_zero_bytes;        /* 나머지 zero-fill byte 수 */
+};
+
 static bool
 lazy_load_segment (struct page *page, void *aux)
 {
@@ -1137,7 +1199,9 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* TODO: lazy_load_segment에 정보를 전달할 수 있도록 aux를 설정하세요. */
+		/* Project 3 구현 시 struct lazy_load_segment_aux를 page마다 만들어
+		 * file, offset, read/zero byte 수를 넘긴다. 이렇게 하면 lazy load와
+		 * mmap 모두 file position 공유 없이 file_read_at() 기반으로 이어갈 수 있다. */
 		void *aux = NULL;
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 											writable, lazy_load_segment, aux))
@@ -1147,6 +1211,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += page_read_bytes;
 	}
 	return true;
 }

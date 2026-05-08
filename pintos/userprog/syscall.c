@@ -34,6 +34,11 @@ static void sys_seek (int fd, unsigned position);
 static unsigned sys_tell (int fd);
 static void sys_close (int fd);
 
+enum user_access {
+	USER_ACCESS_READ,
+	USER_ACCESS_WRITE,
+};
+
 /* 시스템 콜.
  *
  * 이전에는 system call 서비스가 interrupt handler(예: linux의 int 0x80)에 의해 처리되었다. 그러나
@@ -169,68 +174,57 @@ syscall_handler (struct intr_frame *f)
 	}
 }
 
-void
-validate_user_read (const void *buffer, size_t size)
+/* Project 2는 pml4에 이미 매핑된 page만 user buffer로 인정한다.
+ * Project 3에서 lazy page가 들어오면 이 helper의 "page present" 판정을
+ * spt_find_page()/vm_try_handle_fault 흐름과 연결하면 된다. */
+static void
+validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 {
-    if (size == 0) return;
-    if (buffer == NULL) thread_exit (); // size > 0인데 주소가 없다, 메모리 접근 불가.
+	if (size == 0)
+		return;
+	if (buffer == NULL)
+		thread_exit ();
 
 	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
-    const uint8_t *bf =(const uint8_t *) buffer;
+	const uint8_t *bf = (const uint8_t *) buffer;
 	// end address 따로 정의: buffer의 끝 바이트 주소
-	const uint8_t *end_adr = bf+size-1;
+	const uint8_t *end_adr = bf + size - 1;
 
 	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
-	if (end_adr < bf) thread_exit (); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
+	if (end_adr < bf)
+		thread_exit ();
 
 	// 순회할 시작페이지, 끝 페이지 정의
 	const uint8_t *start_page = pg_round_down (bf);
 	const uint8_t *end_page = pg_round_down (end_adr);
 
-    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
-    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
-    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
+	// buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
+	// buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
+	for (const uint8_t *i = start_page; i <= end_page; i += PGSIZE) {
 		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
-		if (!is_user_vaddr (i)) thread_exit ();
-		// page가 실제 mapped 되어있지 않다면 현재 프로세스 exit(-1)
-		// pml4_get_page 함수 인수 확인, thread_current()->pml4: 현재 실행중인 함수 인수 테이블
-		if (!pml4_get_page (thread_current()->pml4, i)) thread_exit ();
+		if (!is_user_vaddr (i))
+			thread_exit ();
+
+		uint64_t *pte = pml4e_walk (thread_current ()->pml4,
+				(const uint64_t) i, false);
+		if (pte == NULL || (*pte & PTE_P) == 0 || (*pte & PTE_U) == 0)
+			thread_exit ();
+
+		if (access == USER_ACCESS_WRITE && (*pte & PTE_W) == 0)
+			thread_exit ();
 	}
 }
 
 void
-validate_user_write(const void *buffer, size_t size)
+validate_user_read (const void *buffer, size_t size)
 {
-	if (size == 0) return;
-    if (buffer == NULL) thread_exit (); // size > 0인데 주소가 없다, 메모리 접근 불가. 바로 false
+	validate_user_buffer (buffer, size, USER_ACCESS_READ);
+}
 
-	// 반복문 돌리기 위해서 주소를 1바이트씩 이동시킬 수 있게 변경: buffer의 시작 바이트 주소
-    const uint8_t *bf = (const uint8_t *) buffer;
-	// end address 따로 정의: buffer의 끝 바이트 주소
-	const uint8_t *end_adr = bf+size-1;
-
-	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
-	if (end_adr < bf) thread_exit (); // 사이즈가 말도 안되게 큰 경우, 주소 오버플로우 처리
-
-	// 순회할 시작페이지, 끝 페이지 정의
-	const uint8_t *start_page = pg_round_down (bf);
-	const uint8_t *end_page = pg_round_down (end_adr);
-
-    // buffer가 걸쳐진 모든 page를 순회 (페이지 단위로 확인)
-    // buffer의 시작주소 + PGSIZE: buffer의 끝 주소까지 순회
-    for (const uint8_t *i = start_page; i <= end_page; i+=PGSIZE) {
-		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
-		if (!is_user_vaddr (i)) thread_exit ();
-		// writable 페이지인지 검증 - PTE 사용
-		// pte가 NULL이 아닌지, *pte에 PTE_P가 있는지, *pte에 PTE_U가 있는지,  *pte에 PTE_W가 있는지 - 모두 충족해야함
-		uint64_t *pte = pml4e_walk (thread_current ()->pml4, (const uint64_t)i, false);
-
-		if (pte == NULL || (*pte & PTE_P) == 0 || (*pte & PTE_U) == 0)
-			thread_exit ();
-
-		if ((*pte & PTE_W) == 0)
-			thread_exit ();
-    }
+void
+validate_user_write (const void *buffer, size_t size)
+{
+	validate_user_buffer (buffer, size, USER_ACCESS_WRITE);
 }
 
 void
