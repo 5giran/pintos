@@ -33,77 +33,107 @@ Pintos 구현 요구사항 판단은 아래 로컬 자료를 기준으로 한다
 - `vm/vm.c`, `include/vm/vm.h`, `userprog/process.c`, `userprog/syscall.c`는 충돌이 잦으므로 티켓 본문에 적힌 범위 밖의 리팩터링은 별도 티켓으로 분리한다.
 - Optional COW는 기본 VM 티켓과 분리한다. 기본 Project 3 통과 전에 COW를 섞으면 fork, eviction, write-protection 디버깅 범위가 불필요하게 커진다.
 
+## 시간 산정 기준
+
+아래 추정치는 3명이 Project 2 코드를 이해하고 있고, 각 티켓의 구현과 기본 디버깅까지 포함한 person-hour 기준이다. 테스트 환경 문제, 기존 Project 2 버그, nondeterministic 동시성 버그가 있으면 실제 시간은 1.5배 이상 늘 수 있다.
+
+난이도 기준:
+
+| 난이도 | 의미 | 보통 소요 |
+| --- | --- | --- |
+| D1 | 문서 정리나 작은 연결 작업 | 1~2h |
+| D2 | 범위가 작고 의존성이 낮은 구현 | 2~4h |
+| D3 | VM 공통 경로와 맞물리는 구현 | 4~7h |
+| D4 | 여러 subsystem이 맞물리는 통합 구현 | 8~12h |
+| D5 | nondeterministic 버그 가능성이 높은 고위험 통합 | 12h+ |
+
+마일스톤별 기준 추정:
+
+| 묶음 | 포함 티켓 | 예상 소요 |
+| --- | --- | --- |
+| 준비/계약 | `VM-00`~`VM-02` | 8h |
+| Core VM | `VM-03`~`VM-07` | 28h |
+| Lazy/Stack | `LD-01`~`LD-03`, `ST-01`~`ST-03` | 27h |
+| mmap/file-backed | `MM-01`~`MM-06`, `FB-01`~`FB-03` | 49h |
+| Eviction/Swap | `FR-01`~`FR-03`, `SW-01`~`SW-05` | 44h |
+| fork/exit 통합 | `PE-01`~`PE-02`, `FK-01`~`FK-03` | 37h |
+| 통합 QA | `QA-01`~`QA-04` | 26h |
+| 기본 Project 3 합계 | Optional COW 제외 | 약 219h |
+| Optional COW | `X-01`~`X-05` | 약 46h |
+
+첫 이정표인 "VM 빌드에서 Project 2 회귀"는 `VM-00`~`VM-07`, `LD-01`~`LD-03`, `PE-01`이 기본이며 약 59h다. Project 2의 fork 테스트까지 의미 있게 보려면 `FK-01`, `FK-02`도 필요해서 약 77h로 잡는다.
+
 ## 전체 DAG
 
 ```mermaid
 flowchart TD
     subgraph PRE["0. 준비와 계약"]
-        VM00["VM-00\n문서/테스트 맵"]
-        VM01["VM-01\nVM 자료구조 계약"]
-        VM02["VM-02\n동기화/소유권 계약"]
+        VM00["VM-00\n문서/테스트 맵\nD1 · 2h"]
+        VM01["VM-01\nVM 자료구조 계약\nD2 · 3h"]
+        VM02["VM-02\n동기화/소유권 계약\nD2 · 3h"]
     end
 
     subgraph CORE["1. Core VM 기반"]
-        VM03["VM-03\nSPT 저장소"]
-        VM04["VM-04\npage/uninit lifecycle"]
-        VM05["VM-05\n최소 frame table"]
-        VM06["VM-06\nclaim + pml4 map"]
-        VM07["VM-07\npage fault 기본 경로"]
+        VM03["VM-03\nSPT 저장소\nD3 · 5h"]
+        VM04["VM-04\npage/uninit lifecycle\nD3 · 6h"]
+        VM05["VM-05\n최소 frame table\nD3 · 5h"]
+        VM06["VM-06\nclaim + pml4 map\nD3 · 6h"]
+        VM07["VM-07\npage fault 기본 경로\nD3 · 6h"]
     end
 
     subgraph LOAD["2. Lazy Loading과 Stack"]
-        LD01["LD-01\n실행 파일 page 등록"]
-        LD02["LD-02\nlazy segment load"]
-        LD03["LD-03\n초기 stack VM 전환"]
-        ST01["ST-01\nuser rsp 보존"]
-        ST02["ST-02\nstack growth"]
-        ST03["ST-03\nstack robustness"]
+        LD01["LD-01\n실행 파일 page 등록\nD3 · 5h"]
+        LD02["LD-02\nlazy segment load\nD3 · 6h"]
+        LD03["LD-03\n초기 stack VM 전환\nD2 · 4h"]
+        ST01["ST-01\nuser rsp 보존\nD2 · 3h"]
+        ST02["ST-02\nstack growth\nD3 · 6h"]
+        ST03["ST-03\nstack robustness\nD2 · 3h"]
     end
 
     subgraph MMAP["3. mmap과 file-backed page"]
-        MM01["MM-01\nmmap syscall 표면"]
-        MM02["MM-02\nmmap range 검증"]
-        MM03["MM-03\nmapping metadata"]
-        MM04["MM-04\ndo_mmap lazy 등록"]
-        FB01["FB-01\nfile page init"]
-        FB02["FB-02\nfile swap_in"]
-        FB03["FB-03\nfile writeback"]
-        MM05["MM-05\ndo_munmap"]
-        MM06["MM-06\nclose/remove/exit 독립성"]
+        MM01["MM-01\nmmap syscall 표면\nD2 · 3h"]
+        MM02["MM-02\nmmap range 검증\nD3 · 6h"]
+        MM03["MM-03\nmapping metadata\nD3 · 5h"]
+        MM04["MM-04\ndo_mmap lazy 등록\nD3 · 6h"]
+        FB01["FB-01\nfile page init\nD2 · 3h"]
+        FB02["FB-02\nfile swap_in\nD3 · 5h"]
+        FB03["FB-03\nfile writeback\nD4 · 8h"]
+        MM05["MM-05\ndo_munmap\nD4 · 8h"]
+        MM06["MM-06\nclose/remove/exit 독립성\nD3 · 5h"]
     end
 
     subgraph EVICT["4. Eviction과 Swap"]
-        FR01["FR-01\nframe invariant 강화"]
-        FR02["FR-02\nvictim 선택"]
-        FR03["FR-03\neviction frame 재사용"]
-        SW01["SW-01\nswap disk/bitmap"]
-        SW02["SW-02\nanon swap 상태"]
-        SW03["SW-03\nanon swap_out"]
-        SW04["SW-04\nanon swap_in"]
-        SW05["SW-05\nswap cleanup"]
+        FR01["FR-01\nframe invariant 강화\nD3 · 5h"]
+        FR02["FR-02\nvictim 선택\nD3 · 5h"]
+        FR03["FR-03\neviction frame 재사용\nD4 · 8h"]
+        SW01["SW-01\nswap disk/bitmap\nD2 · 4h"]
+        SW02["SW-02\nanon swap 상태\nD2 · 3h"]
+        SW03["SW-03\nanon swap_out\nD4 · 8h"]
+        SW04["SW-04\nanon swap_in\nD3 · 6h"]
+        SW05["SW-05\nswap cleanup\nD3 · 5h"]
     end
 
     subgraph FORK["5. fork와 종료 정리"]
-        PE01["PE-01\nSPT kill/destroy"]
-        FK01["FK-01\nunloaded page copy"]
-        FK02["FK-02\nloaded page copy"]
-        FK03["FK-03\nfork/exec mmap 격리"]
-        PE02["PE-02\n최종 resource audit"]
+        PE01["PE-01\nSPT kill/destroy\nD4 · 8h"]
+        FK01["FK-01\nunloaded page copy\nD4 · 8h"]
+        FK02["FK-02\nloaded page copy\nD4 · 10h"]
+        FK03["FK-03\nfork/exec mmap 격리\nD3 · 5h"]
+        PE02["PE-02\n최종 resource audit\nD3 · 6h"]
     end
 
     subgraph QA["6. 통합 체크포인트"]
-        QA01["QA-01\ncore/lazy/stack checkpoint"]
-        QA02["QA-02\nmmap checkpoint"]
-        QA03["QA-03\nswap/fork checkpoint"]
-        QA04["QA-04\n전체 회귀 checkpoint"]
+        QA01["QA-01\ncore/lazy/stack checkpoint\nD2 · 4h"]
+        QA02["QA-02\nmmap checkpoint\nD3 · 6h"]
+        QA03["QA-03\nswap/fork checkpoint\nD4 · 10h"]
+        QA04["QA-04\n전체 회귀 checkpoint\nD3 · 6h"]
     end
 
     subgraph EXTRA["7. Optional COW"]
-        X01["X-01\nCOW 설계"]
-        X02["X-02\nCOW metadata/refcount"]
-        X03["X-03\nfork write-protect"]
-        X04["X-04\nwrite fault copy"]
-        X05["X-05\nCOW eviction/exit"]
+        X01["X-01\nCOW 설계\nD2 · 4h"]
+        X02["X-02\nCOW metadata/refcount\nD4 · 8h"]
+        X03["X-03\nfork write-protect\nD4 · 10h"]
+        X04["X-04\nwrite fault copy\nD5 · 12h"]
+        X05["X-05\nCOW eviction/exit\nD5 · 12h"]
     end
 
     VM00 --> VM01
