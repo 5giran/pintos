@@ -1,0 +1,28 @@
+{
+  "configurations": [
+    {
+      "name": "Pintos Docker",
+      "includePath": [
+        "${workspaceFolder}/pintos",
+        "${workspaceFolder}/pintos/include",
+        "${workspaceFolder}/pintos/include/lib",
+        "${workspaceFolder}/pintos/include/lib/kernel",
+        "${workspaceFolder}/pintos/include/lib/user",
+        "${workspaceFolder}/pintos/lib/kernel"
+      ],
+      "browse": {
+        "path": [
+          "${workspaceFolder}/pintos"
+        ],
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "defines": [
+        "__GNUC__"
+      ],
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu99",
+      "intelliSenseMode": "linux-gcc-x64"
+    }
+  ],
+  "version": 4
+}
