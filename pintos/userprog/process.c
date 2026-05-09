@@ -1,3 +1,5 @@
+#define VM
+
 #include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -1155,13 +1157,6 @@ install_page (void *upage, void *kpage, bool writable)
 #else
 /* 여기부터의 코드는 project 3 이후에 사용됩니다.
  * 함수를 project 2에만 구현하고 싶다면 위쪽 블록에 구현하세요. */
-
-struct lazy_load_segment_aux {
-	struct file *file;             /* page fault 때 읽을 executable 또는 mmap file */
-	off_t ofs;                     /* file_read_at()에 넘길 page별 시작 offset */
-	size_t page_read_bytes;        /* 파일에서 채울 byte 수 */
-	size_t page_zero_bytes;        /* 나머지 zero-fill byte 수 */
-};
 
 static bool
 lazy_load_segment (struct page *page, void *aux)
