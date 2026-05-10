@@ -64,7 +64,85 @@ git rebase develop
 
 충돌이 어렵거나 shared file 충돌이면 혼자 해결하지 말고 최소 1명과 함께 본다.
 
-## 2. Commit 규칙
+## 2. Issue 규칙
+
+Issue는 작업을 시작하기 전에 목표, 범위, 완료 기준을 팀원이 같은 기준으로 이해하기 위해 작성한다. 구현 중 발견한 bug, 추가 확인이 필요한 요구사항, 리팩토링 작업도 별도 issue로 남긴다.
+
+Issue 제목 형식:
+
+```text
+<type>(<scope>): <summary>
+```
+
+type은 commit 규칙의 type을 그대로 사용한다.
+
+Issue 제목 예시:
+
+```text
+feat(timer): implement alarm clock without busy waiting
+feat(thread): add priority donation for nested locks
+fix(synch): wake highest-priority waiter first
+refactor(thread): split priority recalculation helper
+docs(project1): organize mlfqs debugging notes
+```
+
+Issue 작성 원칙:
+
+- 하나의 issue는 하나의 기능, 하나의 bug, 하나의 조사 주제만 다룬다.
+- 구현 범위와 제외 범위를 함께 적는다.
+- 관련 reference, 테스트 파일, 실패 로그가 있으면 링크나 경로를 남긴다.
+- 목표 테스트와 회귀 테스트 후보를 구분해서 적는다.
+- 작업 전 가설은 단정하지 않고 "확인할 것"으로 적는다.
+- 구현 방향을 논의할 수는 있지만, 테스트 이름 기반 하드코딩이나 임시 우회는 완료 기준으로 삼지 않는다.
+- issue가 커지면 선행 issue와 후속 issue로 나누고 의존 관계를 본문에 적는다.
+- issue를 닫기 전에 연결된 PR, 통과한 테스트, 남은 위험 요소를 확인한다.
+
+Issue 본문 템플릿:
+
+````md
+## 배경
+
+-
+
+## 작업 범위
+
+-
+
+## 제외 범위
+
+-
+
+## 기준 자료
+
+- `pintos/docs/reference/...`
+- `pintos/tests/...`
+
+## 목표 테스트
+
+- [ ] `make tests/<path>/<test-name>.result`
+
+## 회귀 테스트 후보
+
+- [ ] `make tests/<path>/<test-name>.result`
+
+## 확인할 것
+
+-
+
+## 완료 기준
+
+- [ ] 구현 범위가 코드 또는 문서에 반영됨
+- [ ] 목표 테스트 통과 여부를 확인함
+- [ ] 관련 회귀 테스트 영향 여부를 확인함
+- [ ] debug print와 임시 코드가 남아 있지 않음
+- [ ] PR 본문에 issue 번호를 연결함
+
+## 위험 요소
+
+-
+````
+
+## 3. Commit 규칙
 
 형식:
 
@@ -121,7 +199,7 @@ commit 단위 원칙:
 - commit은 "언제 올릴지"보다 "무슨 변경을 묶는지"가 더 중요하다. 테스트 이름 하나보다 코드상 의미 단위를 우선한다.
 - 테스트 통과 여부만 적는 commit보다, 왜 그 변경이 필요한지 드러나는 summary를 우선한다.
 
-## 3. PR 규칙
+## 4. PR 규칙
 
 PR 제목 형식:
 
@@ -215,7 +293,7 @@ paste result here
 - [ ] 복잡한 invariant는 주석 또는 문서에 설명
 ````
 
-## 4. 리뷰 방식
+## 5. 리뷰 방식
 
 PR 작성자를 제외한 두 명이 함께 검토한다.
 
@@ -250,7 +328,7 @@ PR 작성자를 제외한 두 명이 함께 검토한다.
 [질문/제안] D 방식으로 확인하거나 수정하는 것은 어떨까요?
 ```
 
-## 5. 코드 컨벤션
+## 6. 코드 컨벤션
 
 - 기존 PintOS 코드 스타일을 우선한다.
 - 새 함수 이름과 코드 구조는 현재 `develop`에 올라간 주변 코드 스타일을 먼저 따른다.
