@@ -7,6 +7,7 @@
 #include "hash.h"
 #include "../debug.h"
 #include "threads/malloc.h"
+#include "/workspaces/pintos/pintos/include/vm/vm.h"
 
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
@@ -17,6 +18,13 @@ static struct hash_elem *find_elem (struct hash *, struct list *,
 static void insert_elem (struct hash *, struct list *, struct hash_elem *);
 static void remove_elem (struct hash *, struct hash_elem *);
 static void rehash (struct hash *);
+
+uint64_t
+hash_func (const struct hash_elem *e, void* aux) {
+	struct page* page = hash_entry (e, struct page, hash_elem);
+
+	return hash_bytes (page->va, sizeof page->va);
+}
 
 /* 보조 데이터 AUX가 주어졌을 때, HASH를 사용해 해시 값을 계산하고 LESS를 사용해 해시 요소를 비교하도록 해시 테이블 H를
    초기화합니다. */
