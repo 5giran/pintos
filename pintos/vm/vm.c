@@ -185,7 +185,9 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: page table entry를 삽입하여 page의 VA를 frame의 PA에 매핑한다. */
-	struct thread* current;
+	struct thread* current = thread_current ();
+	ASSERT (current != NULL);
+	ASSERT (current->pml4 != NULL);
 	if (pml4_get_page (current->pml4, page->va) == NULL)
 		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
 	return swap_in (page, frame->kva);
