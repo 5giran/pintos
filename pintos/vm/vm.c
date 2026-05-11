@@ -167,7 +167,14 @@ vm_claim_page (void *va UNUSED) {
 	return vm_do_claim_page (page);
 }
 
-/* PAGE를 claim하고 mmu를 설정한다. */
+/* PAGE를 claim하고 mmu를 설정한다. 
+	페이지를 claim한다는 것은 물리 프레임(physical frame)을 할당한다는 뜻입니다. 
+	먼저 vm_get_frame을 호출하여 프레임을 얻습니다. 
+	이 부분은 템플릿에서 이미 처리되어 있습니다. 
+	그런 다음 MMU를 설정해야 합니다. 
+	다시 말해 페이지 테이블(page table)에 가상 주소에서 물리 주소로의 매핑을 
+	추가해야 합니다. 반환값은 이 작업이 성공했는지 여부를 나타내야 합니다.
+*/
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
