@@ -124,6 +124,10 @@ vm_get_frame (void) {
 	struct frame *frame = malloc (sizeof (struct frame));
 	ASSERT (frame != NULL);
 	frame->kva = palloc_get_page (PAL_USER);
+	// TODO. 실패하면 쫒아낼 victim을 골라서 걔를 쫒아낸 뒤, 그 공간을 반환하는 로직을 작성해야 합니다.
+	if (frame->kva == NULL) {
+		return NULL;
+	}
 	frame->page = NULL;
 	ASSERT (frame->page == NULL);
 	return frame;
