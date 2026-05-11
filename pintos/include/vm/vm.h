@@ -48,6 +48,8 @@ struct page {
 	void *va;              /* user space 기준 주소 */
 	struct frame *frame;   /* frame을 가리키는 역참조 */
 
+	struct hash_elem hash_elem;
+
 	/* 타입별 데이터는 union에 묶여 있다.
 	 * 각 함수는 현재 union을 자동으로 감지한다. */
 	union {
@@ -86,6 +88,7 @@ struct page_operations {
  * 이 struct의 설계를 특정 방식으로 강제하고 싶지는 않다.
  * 설계는 전부 여러분에게 달려 있다. */
 struct supplemental_page_table {
+	struct hash table;
 };
 
 #include "threads/thread.h"
