@@ -1185,6 +1185,8 @@ lazy_load_segment (struct page *page, void *aux)
 		return false;
 	}
 	memset (kpage + read_bytes, 0, zero_bytes);
+
+	return true;
 }
 
 /* FILE의 오프셋 OFS에서 시작해 주소 UPAGE에 위치한 세그먼트를 로드합니다.  전체적으로 READ_BYTES +
