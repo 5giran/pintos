@@ -1158,6 +1158,14 @@ install_page (void *upage, void *kpage, bool writable)
 /* 여기부터의 코드는 project 3 이후에 사용됩니다.
  * 함수를 project 2에만 구현하고 싶다면 위쪽 블록에 구현하세요. */
 
+/* page fault가 일어났을때 frame을 어떻게 채울지 */
+struct lazy_load_segment_aux {
+	struct file *file; // 어느 실행 파일을 읽을지
+	off_t ofs; // 실행 파일의 어느 위치부터(숫자값) 읽을지
+	uint32_t read_bytes; // 이 page file에서 몇바이트 읽을지
+	uint32_t zero_bytes; // 채워지지 않은 만큼 0으로 채워놓음
+};
+
 static bool
 lazy_load_segment (struct page *page, void *aux)
 {
