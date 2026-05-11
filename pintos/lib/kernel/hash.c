@@ -19,17 +19,19 @@ static void insert_elem (struct hash *, struct list *, struct hash_elem *);
 static void remove_elem (struct hash *, struct hash_elem *);
 static void rehash (struct hash *);
 
+/* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
 uint64_t
 hash_func (const struct hash_elem *e, void* aux) {
 	struct page* page = hash_entry (e, struct page, hash_elem);
 
-	return hash_bytes (page->va, sizeof page->va);
+	return hash_bytes (&page->va, sizeof page->va);
 }
 
+/* 두 page의 key인 va 값을 비교한다. */
 bool
 less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
 	struct page* pa = hash_entry (a, struct page, hash_elem);
-	struct page* pb = hash_entry (a, struct page, hash_elem);
+	struct page* pb = hash_entry (b, struct page, hash_elem);
 
 	return pa->va < pb->va;
 }
