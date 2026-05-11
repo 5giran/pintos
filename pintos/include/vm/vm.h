@@ -47,6 +47,7 @@ struct page {
 	const struct page_operations *operations;
 	void *va;              /* user space 기준 주소 */
 	struct frame *frame;   /* frame을 가리키는 역참조 */
+	bool writable;
 
 	/* 타입별 데이터는 union에 묶여 있다.
 	 * 각 함수는 현재 union을 자동으로 감지한다. */

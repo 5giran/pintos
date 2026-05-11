@@ -65,6 +65,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		}
 		struct page *p = malloc(sizeof(struct page));
 		uninit_new (p, upage, init, type, aux, initializer);
+		p->writable = writable;
 		/* TODO: 페이지를 spt에 삽입한다. */
 	}
 err:
@@ -184,7 +185,9 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: page table entry를 삽입하여 page의 VA를 frame의 PA에 매핑한다. */
-
+	struct thread* current;
+	if (pml4_get_page (current->pml4, page->va) == NULL)
+		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
 	return swap_in (page, frame->kva);
 }
 
