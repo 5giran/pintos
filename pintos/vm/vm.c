@@ -83,10 +83,13 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 
 /* 검증 후 PAGE를 spt에 삽입한다. */
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt,
+		struct page *page) {
 	int succ = false;
-	/* TODO: 이 함수를 채워라. */
+	
+	if (hash_insert (spt, &page->hash_elem) == NULL) {
+		succ = true;
+	}
 
 	return succ;
 }
