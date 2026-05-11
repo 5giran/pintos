@@ -1205,7 +1205,18 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Project 3 구현 시 struct lazy_load_segment_aux를 page마다 만들어
 		 * file, offset, read/zero byte 수를 넘긴다. 이렇게 하면 lazy load와
 		 * mmap 모두 file position 공유 없이 file_read_at() 기반으로 이어갈 수 있다. */
-		void *aux = NULL;
+		struct lazy_load_segment_aux *aux = malloc (sizeof (struct lazy_load_segment_aux));
+
+		if (aux == NULL) {
+			return false;
+		}
+		
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		
+
 		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
