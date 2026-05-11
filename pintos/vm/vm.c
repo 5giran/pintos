@@ -3,6 +3,7 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "lib/kernel/hash.c"
 
 /* 각 subsystem의 초기화 코드를 호출하여 virtual memory subsystem을 초기화한다. */
 void
@@ -183,7 +184,9 @@ vm_do_claim_page (struct page *page) {
 
 /* 새 supplemental page table을 초기화한다. */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	struct hash *hash = &spt->table;
+	hash_init (hash, hash_func, less_func, NULL);
 }
 
 /* supplemental page table을 src에서 dst로 복사한다. */
