@@ -150,8 +150,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: fault를 검증한다. */
-	/* TODO: 여기에 코드를 작성하세요. */
-
+	page = spt_find_page (spt, addr);
 	return vm_do_claim_page (page);
 }
 
