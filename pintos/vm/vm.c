@@ -84,7 +84,8 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	return page;
 }
 
-/* 검증 후 PAGE를 spt에 삽입한다. */
+/* PAGE를 spt에 삽입한다. 같은 va가 이미 있으면 false를 반환한다. */
+
 bool
 spt_insert_page (struct supplemental_page_table *spt,
 		struct page *page) {
