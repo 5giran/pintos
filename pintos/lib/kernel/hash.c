@@ -26,6 +26,14 @@ hash_func (const struct hash_elem *e, void* aux) {
 	return hash_bytes (page->va, sizeof page->va);
 }
 
+bool
+less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+	struct page* pa = hash_entry (a, struct page, hash_elem);
+	struct page* pb = hash_entry (a, struct page, hash_elem);
+
+	return pa->va < pb->va;
+}
+
 /* 보조 데이터 AUX가 주어졌을 때, HASH를 사용해 해시 값을 계산하고 LESS를 사용해 해시 요소를 비교하도록 해시 테이블 H를
    초기화합니다. */
 bool
