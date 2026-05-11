@@ -63,8 +63,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		default:
 			break;
 		}
-		struct page *p = malloc(sizeof(struct page));
-		uninit_new (p, upage, init, type, aux, initializer);
+		struct page *page = malloc (sizeof (struct page));
+		uninit_new (page, upage, init, type, aux, initializer);
 		/* TODO: 페이지를 spt에 삽입한다. */
 	}
 err:
