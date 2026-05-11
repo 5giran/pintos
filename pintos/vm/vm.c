@@ -120,10 +120,10 @@ vm_evict_frame (void) {
  * 위해 frame을 evict한다. */
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: 이 함수를 채우세요. */
-
+	struct frame *frame = malloc (sizeof (struct frame));
 	ASSERT (frame != NULL);
+	frame->kva = palloc_get_page (PAL_USER);
+	frame->page = NULL;
 	ASSERT (frame->page == NULL);
 	return frame;
 }
