@@ -1169,9 +1169,22 @@ struct lazy_load_segment_aux {
 static bool
 lazy_load_segment (struct page *page, void *aux)
 {
-	/* TODO: 파일에서 세그먼트를 로드하세요 */
-	/* TODO: 주소 VA에서 첫 페이지 폴트가 발생했을 때 호출됩니다. */
-	/* TODO: 이 함수를 호출할 때 VA를 사용할 수 있습니다. */
+	if (aux == NULL) {
+		return false;
+	}
+	struct file *file = ((struct lazy_load_segment_aux *) aux)->file;
+	off_t ofs = ((struct lazy_load_segment_aux *) aux)->ofs;
+	uint32_t read_bytes = ((struct lazy_load_segment_aux *) aux)->read_bytes;
+	uint32_t zero_bytes = ((struct lazy_load_segment_aux *) aux)->zero_bytes;
+	free (aux);
+
+	void* kpage = page->frame->kva;
+	
+	if (!read_file_exact_at (file, kpage, read_bytes, ofs)) {
+		palloc_free_page (kpage);
+		return false;
+	}
+	memset (kpage + read_bytes, 0, zero_bytes);
 }
 
 /* FILE의 오프셋 OFS에서 시작해 주소 UPAGE에 위치한 세그먼트를 로드합니다.  전체적으로 READ_BYTES +
