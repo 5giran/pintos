@@ -7,8 +7,6 @@
 #include "hash.h"
 #include "../debug.h"
 #include "threads/malloc.h"
-#include "vm/vm.h"
-#include "threads/vaddr.h"
 
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
@@ -20,22 +18,7 @@ static void insert_elem (struct hash *, struct list *, struct hash_elem *);
 static void remove_elem (struct hash *, struct hash_elem *);
 static void rehash (struct hash *);
 
-/* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
-uint64_t
-hash_func (const struct hash_elem *e, void* aux) {
-	struct page* page = hash_entry (e, struct page, hash_elem);
 
-	return hash_bytes (pg_round_down(page->va), sizeof page->va);
-}
-
-/* 두 page의 key인 va 값을 비교한다. */
-bool
-less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
-	struct page* pa = hash_entry (a, struct page, hash_elem);
-	struct page* pb = hash_entry (b, struct page, hash_elem);
-
-	return pg_round_down(pa->va) < pg_round_down(pb->va);
-}
 
 /* 보조 데이터 AUX가 주어졌을 때, HASH를 사용해 해시 값을 계산하고 LESS를 사용해 해시 요소를 비교하도록 해시 테이블 H를
    초기화합니다. */
