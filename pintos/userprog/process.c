@@ -1260,6 +1260,12 @@ setup_stack (struct intr_frame *if_)
 	 * TODO: 페이지가 stack임을 표시해야 합니다. */
 	/* TODO: 여기에 코드를 작성하세요 */
 
+	vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true);
+	vm_claim_page (stack_bottom);
+	
+	struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
+	anon_initializer (page, VM_ANON | VM_MARKER_0, page->frame->kva); // TODO. 이거 넣는게 맞나??
+	if_->rsp = USER_STACK;
 	return success;
 }
 #endif /* 가상 메모리(VM) */
