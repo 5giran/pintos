@@ -26,6 +26,10 @@ file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	page->operations = &file_ops;
 
 	struct file_page *file_page = &page->file;
+
+	ASSERT(VM_TYPE(type) == VM_FILE);
+
+	return true;
 }
 
 /* 파일에서 내용을 읽어 페이지를 swap in 한다. */
