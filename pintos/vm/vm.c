@@ -65,6 +65,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+
+
 	/* upage가 이미 점유되어 있는지 확인한다. */
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: 페이지를 생성하고, VM type에 따라 initializer를 가져온 다음,
@@ -91,12 +93,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		page->writable = writable;
 		
 		if (!spt_insert_page (spt, page)) {
+			printf ("페이지를 SPT에 넣는데 실패했어요....===\n");
+
 			free(page);
 			goto err;
 		}
 		return true;
 	}
 err:
+printf ("아마 spt가 제대로 kill 되지 않은 문제일 수 있어요. ...===\n");
 	return false;
 }
 
@@ -251,9 +256,21 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
 }
 
+void
+vm_hash_destroy_func (struct hash_elem *e, void *aux UNUSED) {
+	struct page * page = hash_entry (e, struct page, hash_elem);
+
+	free (page->frame);
+	free (page);
+}
+
 /* supplemental page table이 보유한 resource를 해제한다. */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: thread가 보유한 모든 supplemental_page_table을 destroy하고
 	 * TODO: 수정된 모든 내용을 storage에 writeback한다. */
+	// TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
+
+	// TODO. destroy 함수가 필요해요. hash_elem을 받아서 page 자체를 할당 해제하는 함수가 필요해요.
+	hash_clear (spt, vm_hash_destroy_func);
 }
