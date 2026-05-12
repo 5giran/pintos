@@ -114,7 +114,8 @@ spt_insert_page (struct supplemental_page_table *spt,
 		struct page *page) {
 	int succ = false;
 	
-	if (hash_insert (spt, &page->hash_elem) == NULL) {
+	/* spt 자체가 아니라 내부 page table을 넘겨야 한다 */
+	if (hash_insert (&spt->table, &page->hash_elem) == NULL) {
 		succ = true;
 	}
 
