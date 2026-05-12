@@ -50,7 +50,21 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		/* TODO: 페이지를 생성하고, VM type에 따라 initializer를 가져온 다음,
 		 * TODO: uninit_new를 호출하여 "uninit" page struct를 생성한다. 그 후
 		 * TODO: uninit_new를 호출한 뒤 필드를 수정해야 한다. */
-
+		bool (*initializer)(struct page *, enum vm_type, void *) = NULL;
+		switch (type)
+		{
+		case VM_ANON:
+			initializer = anon_initializer;
+			break;
+		case VM_FILE:
+			initializer = file_backed_initializer;
+			break;
+		
+		default:
+			break;
+		}
+		struct page *page = malloc (sizeof (struct page));
+		uninit_new (page, upage, init, type, aux, initializer);
 		/* TODO: 페이지를 spt에 삽입한다. */
 	}
 err:
