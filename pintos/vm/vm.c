@@ -87,7 +87,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			goto err;
 		}
 		uninit_new (page, upage, init, type, aux, initializer);
-    p->writable = writable;
+		page->writable = writable;
 		
 		if (!spt_insert_page (spt, page)) {
 			free(page);
