@@ -8,8 +8,9 @@
 static uint64_t
 hash_func (const struct hash_elem *e, void* aux) {
 	struct page* page = hash_entry (e, struct page, hash_elem);
+	void *va = pg_round_down(page->va);
 
-	return hash_bytes (pg_round_down(page->va), sizeof page->va);
+	return hash_bytes (&va, sizeof va);
 }
 
 /* 두 page의 key인 va 값을 비교한다. */
