@@ -211,20 +211,20 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 		uint64_t *pte = pml4e_walk (thread_current ()->pml4,
 				(const uint64_t) i, true);
 		
-		if (pte == NULL || (*pte & PTE_U) == 0) {
-			printf ("[debug] validate_user_buffer: invalid user PTE "
-					"addr=%p pte=%p pte_val=%llx access=%d\n",
-					(const void *) i, (void *) pte,
-					pte != NULL ? (unsigned long long) *pte : 0, access);
+		if (pte == NULL  || (*pte & PTE_U) == 1) {
+			// printf ("[debug] validate_user_buffer: invalid user PTE "
+			// 		"addr=%p pte=%p pte_val=%llx access=%d\n",
+			// 		(const void *) i, (void *) pte,
+			// 		pte != NULL ? (unsigned long long) *pte : 0, access);
 			thread_exit ();
 		}
 
 		// PTE_P == 0 분기 분리
 		if ((*pte & PTE_P) == 0) {
-			printf ("[debug] validate_user_buffer: non-present page "
-					"addr=%p pte=%p pte_val=%llx access=%d\n",
-					(const void *) i, (void *) pte,
-					(unsigned long long) *pte, access);
+			// printf ("[debug] validate_user_buffer: non-present page "
+			// 		"addr=%p pte=%p pte_val=%llx access=%d\n",
+			// 		(const void *) i, (void *) pte,
+			// 		(unsigned long long) *pte, access);
 			// 스레드 구조체 내부에 다 있다...
 			if (spt_find_page (&thread_current ()->spt, i) == NULL) {
 				thread_exit ();
