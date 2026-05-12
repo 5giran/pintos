@@ -83,6 +83,9 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			break;
 		}
 		struct page *page = malloc (sizeof (struct page));
+		if (page == NULL) {
+			goto err;
+		}
 		uninit_new (page, upage, init, type, aux, initializer);
     p->writable = writable;
 		
