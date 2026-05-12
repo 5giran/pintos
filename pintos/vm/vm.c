@@ -97,9 +97,11 @@ struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = malloc (sizeof (struct page));
 	page->va = va;
-	/* TODO: 이 함수를 채워라. */
+
 	struct hash_elem *he = hash_find (&spt->table, &page->hash_elem);
 	free (page);
+	
+	if (he == NULL) return NULL;
 	page = hash_entry (he, struct page, hash_elem);
 
 	return page;
