@@ -71,7 +71,7 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		 * TODO: uninit_new를 호출하여 "uninit" page struct를 생성한다. 그 후
 		 * TODO: uninit_new를 호출한 뒤 필드를 수정해야 한다. */
 		bool (*initializer)(struct page *, enum vm_type, void *) = NULL;
-		switch (type)
+		switch (type & 0b11)
 		{
 		case VM_ANON:
 			initializer = anon_initializer;
@@ -201,12 +201,12 @@ vm_dealloc_page (struct page *page) {
 
 /* VA에 할당된 page를 claim한다. */
 bool
-vm_claim_page (void *va UNUSED) {
+vm_claim_page (void *va) {
 	struct page *page = NULL;
 	/* TODO: 이 함수를 채우세요. */
 	struct supplemental_page_table *spt = &thread_current ()->spt;
-	page = spt_find_page (spt, va);
-
+	page = spt_find_page (spt, va);	
+	ASSERT (page != NULL);
 	return vm_do_claim_page (page);
 }
 
@@ -232,7 +232,9 @@ vm_do_claim_page (struct page *page) {
 	ASSERT (current->pml4 != NULL);
 	if (pml4_get_page (current->pml4, page->va) == NULL)
 		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
-	return swap_in (page, frame->kva);
+	bool result = swap_in (page, frame->kva);
+
+	return result;
 	// TODO. 시도 도중 실패했다면, 자원 해제하기
 }
 
