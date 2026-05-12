@@ -192,6 +192,7 @@ vm_do_claim_page (struct page *page) {
 	if (pml4_get_page (current->pml4, page->va) == NULL)
 		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
 	return swap_in (page, frame->kva);
+	// TODO. 시도 도중 실패했다면, 자원 해제하기
 }
 
 /* 새 supplemental page table을 초기화한다. */
