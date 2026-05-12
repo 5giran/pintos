@@ -1158,12 +1158,34 @@ install_page (void *upage, void *kpage, bool writable)
 /* 여기부터의 코드는 project 3 이후에 사용됩니다.
  * 함수를 project 2에만 구현하고 싶다면 위쪽 블록에 구현하세요. */
 
+/* page fault가 일어났을때 frame을 어떻게 채울지 */
+struct lazy_load_segment_aux {
+	struct file *file; // 어느 실행 파일을 읽을지
+	off_t ofs; // 실행 파일의 어느 위치부터(숫자값) 읽을지
+	uint32_t read_bytes; // 이 page file에서 몇바이트 읽을지
+	uint32_t zero_bytes; // 채워지지 않은 만큼 0으로 채워놓음
+};
+
 static bool
 lazy_load_segment (struct page *page, void *aux)
 {
-	/* TODO: 파일에서 세그먼트를 로드하세요 */
-	/* TODO: 주소 VA에서 첫 페이지 폴트가 발생했을 때 호출됩니다. */
-	/* TODO: 이 함수를 호출할 때 VA를 사용할 수 있습니다. */
+	if (aux == NULL) {
+		return false;
+	}
+	struct file *file = ((struct lazy_load_segment_aux *) aux)->file;
+	off_t ofs = ((struct lazy_load_segment_aux *) aux)->ofs;
+	uint32_t read_bytes = ((struct lazy_load_segment_aux *) aux)->read_bytes;
+	uint32_t zero_bytes = ((struct lazy_load_segment_aux *) aux)->zero_bytes;
+	free (aux);
+
+	void* kpage = page->frame->kva;
+	
+	if (!read_file_exact_at (file, kpage, read_bytes, ofs)) {
+		return false;
+	}
+	memset (kpage + read_bytes, 0, zero_bytes);
+
+	return true;
 }
 
 /* FILE의 오프셋 OFS에서 시작해 주소 UPAGE에 위치한 세그먼트를 로드합니다.  전체적으로 READ_BYTES +
@@ -1197,10 +1219,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Project 3 구현 시 struct lazy_load_segment_aux를 page마다 만들어
 		 * file, offset, read/zero byte 수를 넘긴다. 이렇게 하면 lazy load와
 		 * mmap 모두 file position 공유 없이 file_read_at() 기반으로 이어갈 수 있다. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-											writable, lazy_load_segment, aux))
+		struct lazy_load_segment_aux *aux = malloc (sizeof (struct lazy_load_segment_aux));
+
+		if (aux == NULL) {
 			return false;
+		}
+		
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		
+
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
+											writable, lazy_load_segment, aux)) 
+		{
+			free (aux);
+			return false;
+		}
+			
 
 		/* 다음으로 진행합니다. */
 		read_bytes -= page_read_bytes;

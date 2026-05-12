@@ -123,7 +123,7 @@ struct thread {
 	struct list donations;							/* 이 thread에게 priority를 기부한 donor thread들의 목록. */
 	struct lock *wait_lock;							/* 이 thread가 현재 기다리는 lock. 기다리는 lock이 없으면 NULL. */
 
-#ifdef USERPROG
+// #ifdef USERPROG
 	/* userprog/process.c가 소유한다. */
 	uint64_t *pml4;                     /* PML4 테이블 */
 	int exit_status;										/* syscall exit status */
@@ -134,7 +134,7 @@ struct thread {
 	struct file *running_file;					/* 현재 thread가 load 하고 실행하고 있는 file */
 	struct file *fd_table[FD_MAX];     	/* 프로세스별 파일 디스크립터 테이블 */
 	int next_fd;                       	/* 다음 할당 후보 fd */
-#endif
+// #endif
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */
 	struct supplemental_page_table spt;

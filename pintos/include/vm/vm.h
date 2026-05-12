@@ -47,6 +47,7 @@ struct page {
 	const struct page_operations *operations;
 	void *va;              /* user space 기준 주소 */
 	struct frame *frame;   /* frame을 가리키는 역참조 */
+	bool writable;
 
 	struct hash_elem hash_elem;
 
