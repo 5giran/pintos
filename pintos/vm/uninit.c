@@ -49,9 +49,15 @@ uninit_initialize (struct page *page, void *kva) {
 	vm_initializer *init = uninit->init;
 	void *aux = uninit->aux;
 
-	/* TODO: 이 함수를 수정해야 할 수도 있다. */
-	return uninit->page_initializer (page, uninit->type, kva) &&
-		(init ? init (page, aux) : true);
+	if (
+		!uninit->page_initializer (page, uninit->type, kva)
+		&& (init ? init (page, aux) : false)
+	) {
+		// TODO. when fail, free allocated resources...
+		return false;
+	}
+	
+	return true;
 }
 
 /* uninit_page가 보유한 자원을 해제한다. 대부분의 페이지는 다른 page objects로 변환되지만, process exit 시
