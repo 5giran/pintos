@@ -1,4 +1,4 @@
-#define VM
+// #define VM
 
 #include "userprog/process.h"
 #include <debug.h>
