@@ -3,7 +3,24 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
-#include "lib/kernel/hash.c"
+
+/* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
+static uint64_t
+hash_func (const struct hash_elem *e, void* aux) {
+	struct page* page = hash_entry (e, struct page, hash_elem);
+
+	return hash_bytes (pg_round_down(page->va), sizeof page->va);
+}
+
+/* 두 page의 key인 va 값을 비교한다. */
+static bool
+less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+	struct page* pa = hash_entry (a, struct page, hash_elem);
+	struct page* pb = hash_entry (b, struct page, hash_elem);
+
+	return pg_round_down(pa->va) < pg_round_down(pb->va);
+}
+
 
 /* 각 subsystem의 초기화 코드를 호출하여 virtual memory subsystem을 초기화한다. */
 void
