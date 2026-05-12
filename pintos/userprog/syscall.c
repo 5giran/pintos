@@ -209,7 +209,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 		/* 현재 프로세스의 페이지 테이블에서 유저 가상주소 i에 해당하는 PTE를 찾는다.
 			create=false이므로, 없으면 새로 만들지 않고 NULL을 반환한다. */
 		uint64_t *pte = pml4e_walk (thread_current ()->pml4,
-				(const uint64_t) i, false);
+				(const uint64_t) i, true);
 		
 		if (pte == NULL || (*pte & PTE_U) == 0) {
 			printf ("[debug] validate_user_buffer: invalid user PTE "
