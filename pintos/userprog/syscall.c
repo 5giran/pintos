@@ -78,6 +78,8 @@ syscall_handler (struct intr_frame *f)
 {
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
+	void * buffer;
+	unsigned size;
 	switch (f->R.rax) {
 
 		/* 시스템 종료 */
@@ -114,12 +116,18 @@ syscall_handler (struct intr_frame *f)
 			break;
 
 		case SYS_READ:
+			buffer = (void *) f->R.rsi;
+			size = (unsigned) f->R.rdx;
+			validate_user_read (buffer, size);
 			f->R.rax = sys_read ((int) f->R.rdi, 
 								 (void *) f->R.rsi,
 								 (unsigned) f->R.rdx);
 			break;
 
 		case SYS_WRITE:
+			buffer = (void *) f->R.rsi;
+			size = (unsigned) f->R.rdx;
+			validate_user_write (buffer, size);
 			f->R.rax = sys_write ((int) f->R.rdi, 
 								 (const void *) f->R.rsi,
 								 (unsigned) f->R.rdx);
@@ -211,11 +219,11 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 		uint64_t *pte = pml4e_walk (thread_current ()->pml4,
 				(const uint64_t) i, true);
 		
-		if (pte == NULL  || (*pte & PTE_U) == 1) {
-			// printf ("[debug] validate_user_buffer: invalid user PTE "
-			// 		"addr=%p pte=%p pte_val=%llx access=%d\n",
-			// 		(const void *) i, (void *) pte,
-			// 		pte != NULL ? (unsigned long long) *pte : 0, access);
+		if (pte == NULL  || (*pte & PTE_U) == 0) {
+			printf ("[debug] validate_user_buffer: invalid user PTE "
+					"addr=%p pte=%p pte_val=%llx access=%d\n",
+					(const void *) i, (void *) pte,
+					pte != NULL ? (unsigned long long) *pte : 0, access);
 			thread_exit ();
 		}
 
