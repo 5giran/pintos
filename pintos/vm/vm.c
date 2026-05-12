@@ -4,6 +4,25 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
+/* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
+static uint64_t
+hash_func (const struct hash_elem *e, void* aux) {
+	struct page* page = hash_entry (e, struct page, hash_elem);
+	void *va = pg_round_down(page->va);
+
+	return hash_bytes (&va, sizeof va);
+}
+
+/* 두 page의 key인 va 값을 비교한다. */
+static bool
+less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+	struct page* pa = hash_entry (a, struct page, hash_elem);
+	struct page* pb = hash_entry (b, struct page, hash_elem);
+
+	return pg_round_down(pa->va) < pg_round_down(pb->va);
+}
+
+
 /* 각 subsystem의 초기화 코드를 호출하여 virtual memory subsystem을 초기화한다. */
 void
 vm_init (void) {
@@ -63,10 +82,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		default:
 			break;
 		}
-		struct page *p = malloc(sizeof(struct page));
-		uninit_new (p, upage, init, type, aux, initializer);
-		p->writable = writable;
-		/* TODO: 페이지를 spt에 삽입한다. */
+		struct page *page = malloc (sizeof (struct page));
+		uninit_new (page, upage, init, type, aux, initializer);
+    p->writable = writable;
+		
+		if (!spt_insert_page (spt, page)) {
+			free(page);
+			goto err;
+		}
+		return true;
 	}
 err:
 	return false;
@@ -75,18 +99,29 @@ err:
 /* spt에서 VA를 찾아 page를 반환한다. 오류 시 NULL을 반환한다. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
-	/* TODO: 이 함수를 채워라. */
+	struct page *page = malloc (sizeof (struct page));
+	page->va = va;
+
+	struct hash_elem *he = hash_find (&spt->table, &page->hash_elem);
+	free (page);
+	
+	if (he == NULL) return NULL;
+	page = hash_entry (he, struct page, hash_elem);
 
 	return page;
 }
 
-/* 검증 후 PAGE를 spt에 삽입한다. */
+/* PAGE를 spt에 삽입한다. 같은 va가 이미 있으면 false를 반환한다. */
+
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt,
+		struct page *page) {
 	int succ = false;
-	/* TODO: 이 함수를 채워라. */
+	
+	/* spt 자체가 아니라 내부 page table을 넘겨야 한다 */
+	if (hash_insert (&spt->table, &page->hash_elem) == NULL) {
+		succ = true;
+	}
 
 	return succ;
 }
@@ -197,7 +232,9 @@ vm_do_claim_page (struct page *page) {
 
 /* 새 supplemental page table을 초기화한다. */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	struct hash *hash = &spt->table;
+	hash_init (hash, hash_func, less_func, NULL);
 }
 
 /* supplemental page table을 src에서 dst로 복사한다. */
