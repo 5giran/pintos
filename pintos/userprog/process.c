@@ -522,15 +522,16 @@ process_exec (void *f_name)
 		 parsing 이후이기 때문에, 첫 인자로 argv_tokens[0]을 넘겨주어야 한다.
 	*/
 	success = load (argv_tokens[0], &_if, argc, argv_tokens); // argv_tokens[0]에 해당하는 실행 파일을 찾아 메모리에 올리고, argv_tokens에 있는 인자들을 유저 스택에 올려서 성공하면 1, 실패하면 0 반환
-
 	/* 로드에 실패하면 종료합니다. 
 		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
 		 f_name은 process_create_initd()에서 할당 받은 페이지
 	*/
 	palloc_free_page (argv_tokens);
 	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
 		return -1;
+	}
+		
 
 	/* 전환된 프로세스를 시작합니다. */
 	do_iret (&_if);
@@ -908,7 +909,10 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 				 	 */
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
+					{	
 						goto done;
+					}
+						
 				} else {
 					goto done;
 				}
@@ -1266,6 +1270,7 @@ setup_stack (struct intr_frame *if_)
 	struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
 	anon_initializer (page, VM_ANON | VM_MARKER_0, page->frame->kva); // TODO. 이거 넣는게 맞나??
 	if_->rsp = USER_STACK;
+	success = true;
 	return success;
 }
 #endif /* 가상 메모리(VM) */
