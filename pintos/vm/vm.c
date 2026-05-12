@@ -107,6 +107,9 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	dummy.va = va;
 	/* TODO: 이 함수를 채워라. */
 	struct hash_elem *he = hash_find (&spt->table, &dummy.hash_elem);
+	if (he == NULL) { 
+		return NULL;
+	}
 	struct page* page = hash_entry (he, struct page, hash_elem);
 
 	return page;
