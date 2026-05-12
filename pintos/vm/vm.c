@@ -63,8 +63,9 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		default:
 			break;
 		}
-		struct page *page = malloc (sizeof (struct page));
-		uninit_new (page, upage, init, type, aux, initializer);
+		struct page *p = malloc(sizeof(struct page));
+		uninit_new (p, upage, init, type, aux, initializer);
+		p->writable = writable;
 		/* TODO: 페이지를 spt에 삽입한다. */
 	}
 err:
@@ -120,10 +121,12 @@ vm_evict_frame (void) {
  * 위해 frame을 evict한다. */
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: 이 함수를 채우세요. */
-
+	struct frame *frame = malloc (sizeof (struct frame));
 	ASSERT (frame != NULL);
+	frame->kva = palloc_get_page (PAL_USER);
+	// TODO. 실패하면 쫒아낼 victim을 골라서 걔를 쫒아낸 뒤, 그 공간을 반환하는 로직을 작성해야 합니다.
+	ASSERT (frame->kva != NULL);
+	frame->page = NULL;
 	ASSERT (frame->page == NULL);
 	return frame;
 }
@@ -145,8 +148,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: fault를 검증한다. */
-	/* TODO: 여기에 코드를 작성하세요. */
-
+	page = spt_find_page (spt, addr);
 	return vm_do_claim_page (page);
 }
 
@@ -167,7 +169,14 @@ vm_claim_page (void *va UNUSED) {
 	return vm_do_claim_page (page);
 }
 
-/* PAGE를 claim하고 mmu를 설정한다. */
+/* PAGE를 claim하고 mmu를 설정한다. 
+	페이지를 claim한다는 것은 물리 프레임(physical frame)을 할당한다는 뜻입니다. 
+	먼저 vm_get_frame을 호출하여 프레임을 얻습니다. 
+	이 부분은 템플릿에서 이미 처리되어 있습니다. 
+	그런 다음 MMU를 설정해야 합니다. 
+	다시 말해 페이지 테이블(page table)에 가상 주소에서 물리 주소로의 매핑을 
+	추가해야 합니다. 반환값은 이 작업이 성공했는지 여부를 나타내야 합니다.
+*/
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
@@ -177,8 +186,13 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: page table entry를 삽입하여 page의 VA를 frame의 PA에 매핑한다. */
-
+	struct thread* current = thread_current ();
+	ASSERT (current != NULL);
+	ASSERT (current->pml4 != NULL);
+	if (pml4_get_page (current->pml4, page->va) == NULL)
+		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
 	return swap_in (page, frame->kva);
+	// TODO. 시도 도중 실패했다면, 자원 해제하기
 }
 
 /* 새 supplemental page table을 초기화한다. */
