@@ -159,6 +159,7 @@ syscall_handler (struct intr_frame *f)
 			if (process_exec (kernel_page) == -1) {
 				thread_exit ();
 			}
+			break;
 			
 		}
 
