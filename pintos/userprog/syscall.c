@@ -237,8 +237,13 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 			}
 		}
 
-		if (access == USER_ACCESS_WRITE && (*pte & PTE_W) == 0)
+		if (access == USER_ACCESS_WRITE && (*pte & PTE_W) == 0) {
+			printf ("[debug] validate_user_buffer: write access denied "
+					"buffer=%p size=%zu page=%p access=%d pte=%p pte_val=%llx\n",
+					buffer, size, (const void *) i, access, (void *) pte,
+					(unsigned long long) *pte);
 			thread_exit ();
+		}
 	}
 }
 
