@@ -18,6 +18,7 @@
 #include "userprog/fd.h"
 #include "userprog/process.h"
 #include "intrinsic.h"
+#include "vm/vm.h"
 
 
 void syscall_entry (void);
