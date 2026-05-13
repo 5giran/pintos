@@ -186,8 +186,15 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
+	if (addr == NULL) {
+		return false;
+	}
 	/* TODO: fault를 검증한다. */
 	page = spt_find_page (spt, addr);
+	if (page == NULL) {
+		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
+		return false;
+	}
 	return vm_do_claim_page (page);
 }
 
