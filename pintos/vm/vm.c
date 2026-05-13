@@ -66,6 +66,8 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+
+
 	/* upage가 이미 점유되어 있는지 확인한다. */
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: 페이지를 생성하고, VM type에 따라 initializer를 가져온 다음,
@@ -92,12 +94,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		page->writable = writable;
 		
 		if (!spt_insert_page (spt, page)) {
+			printf ("페이지를 SPT에 넣는데 실패했어요....===\n");
+
 			free(page);
 			goto err;
 		}
 		return true;
 	}
 err:
+printf ("아마 spt가 제대로 kill 되지 않은 문제일 수 있어요. ...===\n");
 	return false;
 }
 

@@ -105,6 +105,24 @@ tests/userprog/no-vm/multi-oom
 
 `wait-bad-pid`는 로컬 테스트 파일 기준으로 `fork()`를 호출하지 않고 잘못된 pid에 대한 `wait()`만 확인하므로 제외하지 않았다.
 
+## exec 기본 테스트만 실행
+
+`exec-once`, `exec-arg` 두 테스트만 Project 3 빌드로 확인하려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-exec-basic-check
+```
+
+결과 파일만 갱신하고 요약을 만들려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-exec-basic-results
+```
+
+요약은 `pintos/vm/build/selected-results`에 생긴다.
+
 ## Extra 2, dup2 테스트까지 포함
 
 Project 2 extra 테스트인 `dup2`까지 포함하려면 `TEST_SUBDIRS`에 `tests/userprog/dup2`를 추가하고, user program 컴파일 플래그에 `-DEXTRA2`를 준다.

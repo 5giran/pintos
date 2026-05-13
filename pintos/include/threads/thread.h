@@ -1,4 +1,3 @@
-// #define VM
 
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
@@ -29,7 +28,7 @@ enum thread_status {
 typedef int tid_t;
 #define TID_ERROR ((tid_t) -1)          /* tid_t의 오류 값. */
 
-#ifdef USERPROG
+// #ifdef USERPROG
 /* parent와 child가 공유하는 process lifecycle record.
  * record 객체는 struct thread 안에 값으로 넣지 않고, process.c에서
  * malloc()으로 별도 할당해 parent/child가 pointer로 공유한다. */
@@ -45,7 +44,7 @@ struct child_status {
 };
 
 struct file;
-#endif
+// #endif
 
 /* thread priority(스레드 우선순위). */
 #define PRI_MIN 0                       /* 가장 낮은 priority. */
