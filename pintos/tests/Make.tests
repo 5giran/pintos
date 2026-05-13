@@ -9,6 +9,11 @@ EXTRA_GRADES = $(foreach subdir,$(TEST_SUBDIRS),$($(subdir)_EXTRA_GRADES))
 OUTPUTS = $(addsuffix .output,$(TESTS) $(EXTRA_GRADES))
 ERRORS = $(addsuffix .errors,$(TESTS) $(EXTRA_GRADES))
 RESULTS = $(addsuffix .result,$(TESTS) $(EXTRA_GRADES))
+SELECTED_TESTS = $(filter-out $(EXCLUDE_TESTS),$(TESTS) $(EXTRA_GRADES))
+ifdef INCLUDE_TESTS
+SELECTED_TESTS = $(INCLUDE_TESTS)
+endif
+SELECTED_RESULTS = $(addsuffix .result,$(SELECTED_TESTS))
 
 ifdef PROGS
 include ../../Makefile.userprog
@@ -18,8 +23,10 @@ TIMEOUT = 60
 MEMORY = 20
 SWAP_DISK = 4
 
+.PHONY: selected-check selected-results
+
 clean::
-	rm -f $(OUTPUTS) $(ERRORS) $(RESULTS) 
+	rm -f $(OUTPUTS) $(ERRORS) $(RESULTS) selected-results
 
 grade:: results
 	$(SRCDIR)/tests/make-grade $(SRCDIR) $< $(GRADING_FILE) | tee $@
@@ -32,11 +39,31 @@ check:: results
 		echo "All $$COUNT tests passed.";			  \
 	else								  \
 		echo "$$FAILURES of $$COUNT tests failed.";		  \
+			exit 1;							  \
+	fi
+
+selected-check:: selected-results
+	@cat $<
+	@COUNT="`egrep '^(pass|FAIL) ' $< | wc -l | sed 's/[ 	]//g;'`"; \
+	FAILURES="`egrep '^FAIL ' $< | wc -l | sed 's/[ 	]//g;'`"; \
+	if [ $$FAILURES = 0 ]; then					  \
+		echo "All $$COUNT selected tests passed.";		  \
+	else								  \
+		echo "$$FAILURES of $$COUNT selected tests failed.";	  \
 		exit 1;							  \
 	fi
 
 results: $(RESULTS)
 	@for d in $(TESTS) $(EXTRA_GRADES); do			\
+		if echo PASS | cmp -s $$d.result -; then	\
+			echo "pass $$d";			\
+		else						\
+			echo "FAIL $$d";			\
+		fi;						\
+	done > $@
+
+selected-results: $(SELECTED_RESULTS)
+	@for d in $(SELECTED_TESTS); do				\
 		if echo PASS | cmp -s $$d.result -; then	\
 			echo "pass $$d";			\
 		else						\

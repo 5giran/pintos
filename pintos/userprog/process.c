@@ -1,4 +1,3 @@
-#define VM
 
 #include "userprog/process.h"
 #include <debug.h>
@@ -522,15 +521,16 @@ process_exec (void *f_name)
 		 parsing 이후이기 때문에, 첫 인자로 argv_tokens[0]을 넘겨주어야 한다.
 	*/
 	success = load (argv_tokens[0], &_if, argc, argv_tokens); // argv_tokens[0]에 해당하는 실행 파일을 찾아 메모리에 올리고, argv_tokens에 있는 인자들을 유저 스택에 올려서 성공하면 1, 실패하면 0 반환
-
 	/* 로드에 실패하면 종료합니다. 
 		 file_name은 f_name의 포인터이므로, f_name을 free 하는 것과 같음. 
 		 f_name은 process_create_initd()에서 할당 받은 페이지
 	*/
 	palloc_free_page (argv_tokens);
 	palloc_free_page (file_name);
-	if (!success)
+	if (!success) {
 		return -1;
+	}
+		
 
 	/* 전환된 프로세스를 시작합니다. */
 	do_iret (&_if);
@@ -908,7 +908,10 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 				 	 */
 					if (!load_segment (file, file_page, (void *) mem_page,
 								read_bytes, zero_bytes, writable))
+					{	
 						goto done;
+					}
+						
 				} else {
 					goto done;
 				}
@@ -1158,12 +1161,34 @@ install_page (void *upage, void *kpage, bool writable)
 /* 여기부터의 코드는 project 3 이후에 사용됩니다.
  * 함수를 project 2에만 구현하고 싶다면 위쪽 블록에 구현하세요. */
 
+/* page fault가 일어났을때 frame을 어떻게 채울지 */
+struct lazy_load_segment_aux {
+	struct file *file; // 어느 실행 파일을 읽을지
+	off_t ofs; // 실행 파일의 어느 위치부터(숫자값) 읽을지
+	uint32_t read_bytes; // 이 page file에서 몇바이트 읽을지
+	uint32_t zero_bytes; // 채워지지 않은 만큼 0으로 채워놓음
+};
+
 static bool
 lazy_load_segment (struct page *page, void *aux)
 {
-	/* TODO: 파일에서 세그먼트를 로드하세요 */
-	/* TODO: 주소 VA에서 첫 페이지 폴트가 발생했을 때 호출됩니다. */
-	/* TODO: 이 함수를 호출할 때 VA를 사용할 수 있습니다. */
+	if (aux == NULL) {
+		return false;
+	}
+	struct file *file = ((struct lazy_load_segment_aux *) aux)->file;
+	off_t ofs = ((struct lazy_load_segment_aux *) aux)->ofs;
+	uint32_t read_bytes = ((struct lazy_load_segment_aux *) aux)->read_bytes;
+	uint32_t zero_bytes = ((struct lazy_load_segment_aux *) aux)->zero_bytes;
+	free (aux);
+
+	void* kpage = page->frame->kva;
+	
+	if (!read_file_exact_at (file, kpage, read_bytes, ofs)) {
+		return false;
+	}
+	memset (kpage + read_bytes, 0, zero_bytes);
+
+	return true;
 }
 
 /* FILE의 오프셋 OFS에서 시작해 주소 UPAGE에 위치한 세그먼트를 로드합니다.  전체적으로 READ_BYTES +
@@ -1197,10 +1222,25 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		/* Project 3 구현 시 struct lazy_load_segment_aux를 page마다 만들어
 		 * file, offset, read/zero byte 수를 넘긴다. 이렇게 하면 lazy load와
 		 * mmap 모두 file position 공유 없이 file_read_at() 기반으로 이어갈 수 있다. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-											writable, lazy_load_segment, aux))
+		struct lazy_load_segment_aux *aux = malloc (sizeof (struct lazy_load_segment_aux));
+
+		if (aux == NULL) {
 			return false;
+		}
+		
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = page_read_bytes;
+		aux->zero_bytes = page_zero_bytes;
+		
+
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
+											writable, lazy_load_segment, aux)) 
+		{
+			free (aux);
+			return false;
+		}
+			
 
 		/* 다음으로 진행합니다. */
 		read_bytes -= page_read_bytes;
@@ -1223,6 +1263,13 @@ setup_stack (struct intr_frame *if_)
 	 * TODO: 페이지가 stack임을 표시해야 합니다. */
 	/* TODO: 여기에 코드를 작성하세요 */
 
+	vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true);
+	vm_claim_page (stack_bottom);
+	
+	struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
+	anon_initializer (page, VM_ANON | VM_MARKER_0, page->frame->kva); // TODO. 이거 넣는게 맞나??
+	if_->rsp = USER_STACK;
+	success = true;
 	return success;
 }
 #endif /* 가상 메모리(VM) */

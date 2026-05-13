@@ -18,6 +18,8 @@ static void insert_elem (struct hash *, struct list *, struct hash_elem *);
 static void remove_elem (struct hash *, struct hash_elem *);
 static void rehash (struct hash *);
 
+
+
 /* 보조 데이터 AUX가 주어졌을 때, HASH를 사용해 해시 값을 계산하고 LESS를 사용해 해시 요소를 비교하도록 해시 테이블 H를
    초기화합니다. */
 bool

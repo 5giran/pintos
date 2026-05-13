@@ -1,0 +1,183 @@
+# Project 3 빌드로 Project 2 테스트 실행 가이드
+
+## 목적
+
+Project 3 VM 구현이 들어간 커널, 즉 `pintos/vm` 빌드 결과로 Project 2 테스트 묶음을 돌리는 방법을 정리한다.
+
+핵심은 `pintos/userprog`에서 실행하지 않고 `pintos/vm`에서 실행하되, 테스트 목록만 Project 2 기준으로 덮어쓰는 것이다.
+
+## 기준 파일
+
+- `pintos/vm/Make.vars`
+  - Project 3 빌드는 `KERNEL_SUBDIRS`에 `vm`을 포함한다.
+  - 기본 `TEST_SUBDIRS`에는 `tests/vm`이 들어 있어 그냥 `make check`를 하면 Project 3 테스트까지 같이 돈다.
+- `pintos/userprog/Make.vars`
+  - Project 2 기본 테스트 목록은 `tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads`이다.
+- `pintos/Makefile.kernel`
+  - 상위 디렉터리에서 `make check`를 실행하면 `build/` 디렉터리를 준비한 뒤 `build` 안에서 실제 테스트를 실행한다.
+- `pintos/tests/Make.tests`
+  - `TEST_SUBDIRS`에 들어간 테스트 디렉터리의 `Make.tests`만 포함해서 테스트 목록을 만든다.
+
+## 전체 Project 2 테스트 실행
+
+저장소 바깥 루트가 `/Users/sisu/Projects/jungle/pintos`일 때:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make check TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads"
+```
+
+이 명령은 다음 성질을 가진다.
+
+- 빌드 위치는 `pintos/vm`이므로 `vm/Make.vars`의 Project 3 커널 구성을 사용한다.
+- `KERNEL_SUBDIRS`에는 `vm`이 포함된 상태로 유지된다.
+- `TEST_SUBDIRS`만 Project 2의 기본 테스트 목록으로 바뀐다.
+- 결과는 `pintos/vm/build/results`에 요약된다.
+- 각 테스트별 출력은 `pintos/vm/build/tests/.../*.output`, `*.errors`, `*.result`에 생긴다.
+
+## 단일 테스트만 실행
+
+예를 들어 `args-none` 하나만 Project 3 빌드로 확인하려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make build/tests/userprog/args-none.result \
+  TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads"
+```
+
+`no-vm`의 `multi-oom`만 확인하려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make build/tests/userprog/no-vm/multi-oom.result \
+  TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads"
+```
+
+상위 `pintos/vm`에서 `build/...` 형태로 호출하는 이유는 `Makefile.kernel`이 필요한 `build/tests/...` 디렉터리를 먼저 만들어 주기 때문이다. `pintos/vm/build`에 직접 들어가서 실행하면, 처음 실행하는 테스트 하위 디렉터리가 없어서 실패할 수 있다.
+
+## fork 제외 Project 2 테스트만 실행
+
+이 저장소에는 Project 3 빌드에서 Project 2 기본 테스트 묶음을 돌리되, `fork()` syscall에 직접 의존하는 테스트를 제외하는 편의 타깃을 추가했다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-nofork-check
+```
+
+결과 파일만 갱신하고 요약 파일을 만들고 싶으면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-nofork-results
+```
+
+요약은 `pintos/vm/build/selected-results`에 생긴다.
+
+파일 시스템 base 테스트까지 섞지 않고 userprog 중심으로만 보고 싶으면 다음 타깃을 쓴다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-user-nofork-check
+```
+
+이 타깃은 `tests/userprog`와 `tests/threads`만 포함하고, `tests/filesys/base`와 `tests/userprog/no-vm`은 제외한다.
+
+제외되는 테스트는 다음 항목이다.
+
+```text
+tests/userprog/fork-once
+tests/userprog/fork-multiple
+tests/userprog/fork-recursive
+tests/userprog/fork-read
+tests/userprog/fork-close
+tests/userprog/fork-boundary
+tests/userprog/wait-simple
+tests/userprog/wait-twice
+tests/userprog/wait-killed
+tests/userprog/exec-boundary
+tests/userprog/exec-read
+tests/userprog/multi-recurse
+tests/userprog/multi-child-fd
+tests/userprog/rox-child
+tests/userprog/rox-multichild
+tests/userprog/no-vm/multi-oom
+```
+
+`wait-bad-pid`는 로컬 테스트 파일 기준으로 `fork()`를 호출하지 않고 잘못된 pid에 대한 `wait()`만 확인하므로 제외하지 않았다.
+
+## exec 기본 테스트만 실행
+
+`exec-once`, `exec-arg` 두 테스트만 Project 3 빌드로 확인하려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-exec-basic-check
+```
+
+결과 파일만 갱신하고 요약을 만들려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-exec-basic-results
+```
+
+요약은 `pintos/vm/build/selected-results`에 생긴다.
+
+## Extra 2, dup2 테스트까지 포함
+
+Project 2 extra 테스트인 `dup2`까지 포함하려면 `TEST_SUBDIRS`에 `tests/userprog/dup2`를 추가하고, user program 컴파일 플래그에 `-DEXTRA2`를 준다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make check \
+  TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/userprog/dup2 tests/threads" \
+  TDEFINE=-DEXTRA2
+```
+
+`TDEFINE`은 `pintos/Makefile.userprog`에서 user program 컴파일 옵션에 붙는다.
+
+## grade 형식으로 보고 싶을 때
+
+`check`는 pass/FAIL 요약을 보여준다. Pintos grading 형식의 `grade` 파일까지 만들고 싶으면 `GRADING_FILE`도 Project 2 기준으로 덮어쓴다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make grade \
+  TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads" \
+  GRADING_FILE='$(SRCDIR)/tests/userprog/Grading.no-extra'
+```
+
+extra2까지 포함한다면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make grade \
+  TEST_SUBDIRS="tests/userprog tests/filesys/base tests/userprog/no-vm tests/userprog/dup2 tests/threads" \
+  TDEFINE=-DEXTRA2 \
+  GRADING_FILE='$(SRCDIR)/tests/userprog/Grading.extra'
+```
+
+`grade` 결과 파일은 `pintos/vm/build/grade`에 생긴다.
+
+## 결과 확인 위치
+
+전체 요약:
+
+```bash
+cat /Users/sisu/Projects/jungle/pintos/pintos/vm/build/results
+```
+
+단일 테스트 출력 예시:
+
+```bash
+cat /Users/sisu/Projects/jungle/pintos/pintos/vm/build/tests/userprog/args-none.output
+cat /Users/sisu/Projects/jungle/pintos/pintos/vm/build/tests/userprog/args-none.errors
+cat /Users/sisu/Projects/jungle/pintos/pintos/vm/build/tests/userprog/args-none.result
+```
+
+## 주의사항
+
+- `cd pintos/userprog && make check`는 Project 2 빌드로 Project 2 테스트를 돌리는 명령이다. Project 3 VM 코드까지 포함한 커널로 확인하려면 `pintos/vm`에서 실행해야 한다.
+- `cd pintos/vm && make check`만 실행하면 `vm/Make.vars` 기본값 때문에 Project 3 테스트까지 포함된다.
+- Project 3 빌드로 Project 2 테스트를 돌릴 때는 `TEST_SUBDIRS`만 Project 2 목록으로 제한한다.
+- 기존 `pintos/vm/build` 산출물이 꼬였다고 의심되면 사용자가 직접 `cd pintos/vm && make clean` 후 다시 위 명령을 실행하면 된다.
