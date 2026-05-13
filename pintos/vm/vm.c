@@ -258,9 +258,23 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
 }
 
+void
+vm_hash_destroy_func (struct hash_elem *e, void *aux UNUSED) {
+	struct page * page = hash_entry (e, struct page, hash_elem);
+
+	free (page->frame);
+	free (page);
+}
+
 /* supplemental page table이 보유한 resource를 해제한다. */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: thread가 보유한 모든 supplemental_page_table을 destroy하고
 	 * TODO: 수정된 모든 내용을 storage에 writeback한다. */
+	
+	
+	 // TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
+
+	// TODO. destroy 함수가 필요해요. hash_elem을 받아서 page 자체를 할당 해제하는 함수가 필요해요.
+	hash_clear (spt, vm_hash_destroy_func);
 }
