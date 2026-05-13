@@ -10,6 +10,9 @@ OUTPUTS = $(addsuffix .output,$(TESTS) $(EXTRA_GRADES))
 ERRORS = $(addsuffix .errors,$(TESTS) $(EXTRA_GRADES))
 RESULTS = $(addsuffix .result,$(TESTS) $(EXTRA_GRADES))
 SELECTED_TESTS = $(filter-out $(EXCLUDE_TESTS),$(TESTS) $(EXTRA_GRADES))
+ifdef INCLUDE_TESTS
+SELECTED_TESTS = $(INCLUDE_TESTS)
+endif
 SELECTED_RESULTS = $(addsuffix .result,$(SELECTED_TESTS))
 
 ifdef PROGS
