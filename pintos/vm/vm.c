@@ -3,6 +3,26 @@
 #include "threads/malloc.h"
 #include "vm/vm.h"
 #include "vm/inspect.h"
+#include "threads/vaddr.h"
+
+/* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
+static uint64_t
+hash_func (const struct hash_elem *e, void* aux) {
+	struct page* page = hash_entry (e, struct page, hash_elem);
+	void *va = pg_round_down(page->va);
+
+	return hash_bytes (&va, sizeof va);
+}
+
+/* 두 page의 key인 va 값을 비교한다. */
+static bool
+less_func (const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+	struct page* pa = hash_entry (a, struct page, hash_elem);
+	struct page* pb = hash_entry (b, struct page, hash_elem);
+
+	return pg_round_down(pa->va) < pg_round_down(pb->va);
+}
+
 
 /* 각 subsystem의 초기화 코드를 호출하여 virtual memory subsystem을 초기화한다. */
 void
@@ -45,13 +65,15 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
+
+
 	/* upage가 이미 점유되어 있는지 확인한다. */
 	if (spt_find_page (spt, upage) == NULL) {
 		/* TODO: 페이지를 생성하고, VM type에 따라 initializer를 가져온 다음,
 		 * TODO: uninit_new를 호출하여 "uninit" page struct를 생성한다. 그 후
 		 * TODO: uninit_new를 호출한 뒤 필드를 수정해야 한다. */
 		bool (*initializer)(struct page *, enum vm_type, void *) = NULL;
-		switch (type)
+		switch (type & 0b11)
 		{
 		case VM_ANON:
 			initializer = anon_initializer;
@@ -64,28 +86,51 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 			break;
 		}
 		struct page *page = malloc (sizeof (struct page));
+		if (page == NULL) {
+			goto err;
+		}
 		uninit_new (page, upage, init, type, aux, initializer);
-		/* TODO: 페이지를 spt에 삽입한다. */
+		page->writable = writable;
+		
+		if (!spt_insert_page (spt, page)) {
+			printf ("페이지를 SPT에 넣는데 실패했어요....===\n");
+
+			free(page);
+			goto err;
+		}
+		return true;
 	}
 err:
+printf ("아마 spt가 제대로 kill 되지 않은 문제일 수 있어요. ...===\n");
 	return false;
 }
 
 /* spt에서 VA를 찾아 page를 반환한다. 오류 시 NULL을 반환한다. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
+	struct page dummy;
+	dummy.va = va;
 	/* TODO: 이 함수를 채워라. */
+	struct hash_elem *he = hash_find (&spt->table, &dummy.hash_elem);
+	if (he == NULL) { 
+		return NULL;
+	}
+	struct page* page = hash_entry (he, struct page, hash_elem);
 
 	return page;
 }
 
-/* 검증 후 PAGE를 spt에 삽입한다. */
+/* PAGE를 spt에 삽입한다. 같은 va가 이미 있으면 false를 반환한다. */
+
 bool
-spt_insert_page (struct supplemental_page_table *spt UNUSED,
-		struct page *page UNUSED) {
+spt_insert_page (struct supplemental_page_table *spt,
+		struct page *page) {
 	int succ = false;
-	/* TODO: 이 함수를 채워라. */
+	
+	/* spt 자체가 아니라 내부 page table을 넘겨야 한다 */
+	if (hash_insert (&spt->table, &page->hash_elem) == NULL) {
+		succ = true;
+	}
 
 	return succ;
 }
@@ -120,10 +165,12 @@ vm_evict_frame (void) {
  * 위해 frame을 evict한다. */
 static struct frame *
 vm_get_frame (void) {
-	struct frame *frame = NULL;
-	/* TODO: 이 함수를 채우세요. */
-
+	struct frame *frame = malloc (sizeof (struct frame));
 	ASSERT (frame != NULL);
+	frame->kva = palloc_get_page (PAL_USER | PAL_ZERO);
+	// TODO. 실패하면 쫒아낼 victim을 골라서 걔를 쫒아낸 뒤, 그 공간을 반환하는 로직을 작성해야 합니다.
+	ASSERT (frame->kva != NULL);
+	frame->page = NULL;
 	ASSERT (frame->page == NULL);
 	return frame;
 }
@@ -142,11 +189,10 @@ vm_handle_wp (struct page *page UNUSED) {
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
+	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: fault를 검증한다. */
-	/* TODO: 여기에 코드를 작성하세요. */
-
+	page = spt_find_page (spt, addr);
 	return vm_do_claim_page (page);
 }
 
@@ -160,14 +206,23 @@ vm_dealloc_page (struct page *page) {
 
 /* VA에 할당된 page를 claim한다. */
 bool
-vm_claim_page (void *va UNUSED) {
+vm_claim_page (void *va) {
 	struct page *page = NULL;
 	/* TODO: 이 함수를 채우세요. */
-
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	page = spt_find_page (spt, va);	
+	ASSERT (page != NULL);
 	return vm_do_claim_page (page);
 }
 
-/* PAGE를 claim하고 mmu를 설정한다. */
+/* PAGE를 claim하고 mmu를 설정한다. 
+	페이지를 claim한다는 것은 물리 프레임(physical frame)을 할당한다는 뜻입니다. 
+	먼저 vm_get_frame을 호출하여 프레임을 얻습니다. 
+	이 부분은 템플릿에서 이미 처리되어 있습니다. 
+	그런 다음 MMU를 설정해야 합니다. 
+	다시 말해 페이지 테이블(page table)에 가상 주소에서 물리 주소로의 매핑을 
+	추가해야 합니다. 반환값은 이 작업이 성공했는지 여부를 나타내야 합니다.
+*/
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
@@ -177,13 +232,22 @@ vm_do_claim_page (struct page *page) {
 	page->frame = frame;
 
 	/* TODO: page table entry를 삽입하여 page의 VA를 frame의 PA에 매핑한다. */
+	struct thread* current = thread_current ();
+	ASSERT (current != NULL);
+	ASSERT (current->pml4 != NULL);
+	if (pml4_get_page (current->pml4, page->va) == NULL)
+		pml4_set_page (current->pml4, page->va, frame->kva, page->writable);
+	bool result = swap_in (page, frame->kva);
 
-	return swap_in (page, frame->kva);
+	return result;
+	// TODO. 시도 도중 실패했다면, 자원 해제하기
 }
 
 /* 새 supplemental page table을 초기화한다. */
 void
-supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
+supplemental_page_table_init (struct supplemental_page_table *spt) {
+	struct hash *hash = &spt->table;
+	hash_init (hash, hash_func, less_func, NULL);
 }
 
 /* supplemental page table을 src에서 dst로 복사한다. */
@@ -192,9 +256,21 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
 		struct supplemental_page_table *src UNUSED) {
 }
 
+void
+vm_hash_destroy_func (struct hash_elem *e, void *aux UNUSED) {
+	struct page * page = hash_entry (e, struct page, hash_elem);
+
+	free (page->frame);
+	free (page);
+}
+
 /* supplemental page table이 보유한 resource를 해제한다. */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: thread가 보유한 모든 supplemental_page_table을 destroy하고
 	 * TODO: 수정된 모든 내용을 storage에 writeback한다. */
+	// TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
+
+	// TODO. destroy 함수가 필요해요. hash_elem을 받아서 page 자체를 할당 해제하는 함수가 필요해요.
+	hash_clear (spt, vm_hash_destroy_func);
 }
