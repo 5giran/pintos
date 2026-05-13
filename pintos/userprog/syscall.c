@@ -250,13 +250,13 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 void
 validate_user_read (const void *buffer, size_t size)
 {
-	validate_user_buffer (buffer, size, USER_ACCESS_WRITE);
+	validate_user_buffer (buffer, size, USER_ACCESS_READ);
 }
 
 void
 validate_user_write (const void *buffer, size_t size)
 {
-	validate_user_buffer (buffer, size, USER_ACCESS_READ);
+	validate_user_buffer (buffer, size, USER_ACCESS_WRITE);
 }
 
 void
