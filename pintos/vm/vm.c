@@ -282,5 +282,5 @@ supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	 // TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
 
 	// TODO. destroy 함수가 필요해요. hash_elem을 받아서 page 자체를 할당 해제하는 함수가 필요해요.
-	hash_clear (spt, vm_hash_destroy_func);
+	hash_clear (&spt->table, vm_hash_destroy_func);
 }
