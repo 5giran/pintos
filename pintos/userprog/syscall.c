@@ -117,18 +117,12 @@ syscall_handler (struct intr_frame *f)
 			break;
 
 		case SYS_READ:
-			buffer = (void *) f->R.rsi;
-			size = (unsigned) f->R.rdx;
-			validate_user_read (buffer, size);
 			f->R.rax = sys_read ((int) f->R.rdi, 
 								 (void *) f->R.rsi,
 								 (unsigned) f->R.rdx);
 			break;
 
 		case SYS_WRITE:
-			buffer = (void *) f->R.rsi;
-			size = (unsigned) f->R.rdx;
-			validate_user_write (buffer, size);
 			f->R.rax = sys_write ((int) f->R.rdi, 
 								 (const void *) f->R.rsi,
 								 (unsigned) f->R.rdx);
