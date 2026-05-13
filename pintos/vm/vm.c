@@ -4,6 +4,7 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
+#include "threads/mmu.h"
 
 /* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
 static uint64_t
@@ -191,8 +192,15 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
+	if (addr == NULL) {
+		return false;
+	}
 	/* TODO: fault를 검증한다. */
 	page = spt_find_page (spt, addr);
+	if (page == NULL) {
+		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
+		return false;
+	}
 	return vm_do_claim_page (page);
 }
 
@@ -269,8 +277,10 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: thread가 보유한 모든 supplemental_page_table을 destroy하고
 	 * TODO: 수정된 모든 내용을 storage에 writeback한다. */
-	// TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
+	
+	
+	 // TODO. 지금은 그냥 아예 데이터를 삭제해버려요. 하지만 위 TODO가 필요할 수 있어요.
 
 	// TODO. destroy 함수가 필요해요. hash_elem을 받아서 page 자체를 할당 해제하는 함수가 필요해요.
-	hash_clear (spt, vm_hash_destroy_func);
+	hash_clear (&spt->table, vm_hash_destroy_func);
 }

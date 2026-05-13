@@ -1,4 +1,4 @@
-#define VM
+
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
