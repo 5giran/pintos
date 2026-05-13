@@ -28,3 +28,7 @@ core
 
 # macOS
 .DS_Store
+
+# Codex local prompt logs
+.codex/logs/*
+!.codex/logs/.gitkeep

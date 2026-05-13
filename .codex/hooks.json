@@ -1,0 +1,16 @@
+{
+  "description": "Log user prompts submitted to Codex for this repository.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.codex/hooks/log_user_prompt.py\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
