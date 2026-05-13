@@ -105,6 +105,135 @@ tests/userprog/no-vm/multi-oom
 
 `wait-bad-pid`는 로컬 테스트 파일 기준으로 `fork()`를 호출하지 않고 잘못된 pid에 대한 `wait()`만 확인하므로 제외하지 않았다.
 
+## fork 관련 Project 2 테스트만 실행
+
+Project 3 VM 빌드 결과로 `fork()`와 그에 강하게 의존하는 Project 2 테스트만 실행하려면 다음 타깃을 쓴다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-check
+```
+
+이 타깃은 `pintos/vm` 빌드, 즉 Project 3 커널 구성으로 실행하되 테스트 목록만 fork 관련 Project 2 테스트로 제한한다. 실행 후 요약은 터미널에 출력되고, 선택 테스트 요약 파일은 `pintos/vm/build/selected-results`에 생긴다.
+
+결과 파일만 갱신하고 `selected-results`를 만들려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-results
+```
+
+포함되는 테스트 목록은 `pintos/vm/Makefile`의 `P2_FORK_DEPENDENT_TESTS` 기준이다.
+
+```text
+tests/userprog/fork-once
+tests/userprog/fork-multiple
+tests/userprog/fork-recursive
+tests/userprog/fork-read
+tests/userprog/fork-close
+tests/userprog/fork-boundary
+tests/userprog/wait-simple
+tests/userprog/wait-twice
+tests/userprog/wait-killed
+tests/userprog/exec-boundary
+tests/userprog/exec-read
+tests/userprog/multi-recurse
+tests/userprog/multi-child-fd
+tests/userprog/rox-child
+tests/userprog/rox-multichild
+tests/userprog/no-vm/multi-oom
+```
+
+## fork 관련 테스트 하나만 실행
+
+기본 단일 실행 대상은 `tests/userprog/fork-once`다. 테스트 이름은 짧은 이름으로 넘길 수 있다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-one
+```
+
+다른 테스트 하나만 실행하려면 `P2_FORK_TEST`에 테스트 이름을 넘긴다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-one P2_FORK_TEST=fork-read
+```
+
+전체 경로로 지정해도 된다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-one P2_FORK_TEST=tests/userprog/no-vm/multi-oom
+```
+
+주의: `fork-one`이라는 테스트는 없다. 기본 fork 단일 테스트 이름은 `fork-once`다.
+
+짧은 이름으로 지정할 수 있는 fork 관련 테스트는 다음과 같다.
+
+```text
+fork-once
+fork-multiple
+fork-recursive
+fork-read
+fork-close
+fork-boundary
+wait-simple
+wait-twice
+wait-killed
+exec-boundary
+exec-read
+multi-recurse
+multi-child-fd
+rox-child
+rox-multichild
+multi-oom
+```
+
+## fork 관련 테스트 result 보기
+
+단일 테스트의 `.result` 파일만 확인하려면 다음 타깃을 쓴다. `.result`가 없거나 오래되었으면 필요한 `.output`을 먼저 만든 뒤 결과를 출력한다.
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-one-result P2_FORK_TEST=fork-read
+```
+
+직접 파일을 열어도 된다.
+
+```bash
+cat build/tests/userprog/fork-read.result
+```
+
+전체 fork 관련 테스트의 pass/FAIL 요약은 다음 파일에서 본다.
+
+```bash
+cat build/selected-results
+```
+
+## fork 관련 테스트 output 보기
+
+단일 테스트의 실제 실행 로그인 `.output`을 확인하려면:
+
+```bash
+cd /Users/sisu/Projects/jungle/pintos/pintos/vm
+make p2-fork-one-output P2_FORK_TEST=fork-read
+```
+
+직접 파일을 열어도 된다.
+
+```bash
+cat build/tests/userprog/fork-read.output
+```
+
+에러 스트림은 별도 `.errors` 파일에 기록된다.
+
+```bash
+cat build/tests/userprog/fork-read.errors
+```
+
+Docker/devcontainer 안에서 작업 중이면 `/Users/sisu/...` 같은 호스트 macOS 절대경로는 사용할 수 없다. 컨테이너 프롬프트가 `/workspaces/pintos/pintos/vm`라면 항상 위처럼 `build/...` 상대 경로를 쓰거나, 컨테이너 기준 절대경로인 `/workspaces/pintos/pintos/vm/build/...`를 쓴다.
+
 ## exec 기본 테스트만 실행
 
 `exec-once`, `exec-arg` 두 테스트만 Project 3 빌드로 확인하려면:
