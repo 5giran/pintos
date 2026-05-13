@@ -224,7 +224,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 			printf ("[debug] validate_user_buffer: invalid user PTE "
 					"addr=%p pte=%p pte_val=%llx access=%d\n",
 					(const void *) i, (void *) pte,
-					pte != NULL ? (unsigned long long) *pte : 0, access);
+					pte != NULL ? (unsigned long long) *pte : 123, access);
 			thread_exit ();
 		}
 
