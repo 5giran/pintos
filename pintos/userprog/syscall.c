@@ -220,7 +220,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 		uint64_t *pte = pml4e_walk (thread_current ()->pml4,
 				(const uint64_t) i, true);
 		
-		if (pte == NULL  || (*pte & PTE_U) == 0) {
+		if (pte == NULL || (((*pte & PTE_P) == 1) && (*pte & PTE_U) == 0)) {
 			printf ("[debug] validate_user_buffer: invalid user PTE "
 					"addr=%p pte=%p pte_val=%llx access=%d\n",
 					(const void *) i, (void *) pte,
