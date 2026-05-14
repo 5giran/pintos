@@ -454,6 +454,7 @@ __do_fork (void *aux)
 
 	/* 여기까지 오면 child address space 복제가 끝난 상태란 것.
 	 * 이후 user mode로 복귀하면 parent와 같은 코드 위치에서 실행을 이어간다. */
+	DBG ("__do_fork: success...\n");
 	fa->success = true;
 	sema_up (&fa->sema);
 	do_iret (&if_);
@@ -542,7 +543,6 @@ process_exec (void *f_name)
 		return -1;
 	}
 		
-
 	/* 전환된 프로세스를 시작합니다. */
 	do_iret (&_if);
 	NOT_REACHED ();
