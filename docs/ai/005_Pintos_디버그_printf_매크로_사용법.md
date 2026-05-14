@@ -34,8 +34,10 @@ DBG ("fault addr=%p\n", addr);
 
 ```bash
 cd /workspaces/pintos/pintos/vm
-make p2-fork-one P2_FORK_TEST=fork-read DEFINES=-DDEBUG_LOG
+make p2-fork-one P2_FORK_TEST=fork-read DEBUG_LOG=1
 ```
+
+`DEFINES=-DDEBUG_LOG`처럼 `DEFINES`를 직접 넘기면 안 된다. Project 3 VM 빌드에 필요한 기본 값인 `-DUSERPROG -DFILESYS -DVM`이 덮어써져서 VM 전용 필드와 코드가 빠진 상태로 컴파일될 수 있다.
 
 출력 파일 확인:
 

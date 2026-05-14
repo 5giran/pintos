@@ -22,6 +22,7 @@
 #include "threads/vaddr.h"
 #include "intrinsic.h"
 #include "threads/malloc.h"
+#include "debug_log.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -320,6 +321,8 @@ process_fork (const char *name, struct intr_frame *if_)
 
 	tid = thread_create (name, PRI_DEFAULT, __do_fork, fa);
 	if (tid == TID_ERROR) {
+		DBG ("process_fork: thread_create failed name=%s parent=%s parent_tid=%d\n",
+			 name, parent->name, parent->tid);
 		list_remove (&cs->elem);
 		free (cs);
 		free (fa);
@@ -425,8 +428,16 @@ __do_fork (void *aux)
 	process_activate (current);
 #ifdef VM
 	supplemental_page_table_init (&current->spt);
-	if (!supplemental_page_table_copy (&current->spt, &parent->spt))
+	bool spt_copy_success = supplemental_page_table_copy (&current->spt, &parent->spt);
+	bool spt_copy_failed = !spt_copy_success;
+	DBG ("__do_fork: supplemental_page_table_copy result=%d failed=%d parent=%s parent_tid=%d child=%s child_tid=%d\n",
+		 spt_copy_success, spt_copy_failed, parent->name, parent->tid,
+		 current->name, current->tid);
+	if (spt_copy_failed) {
+		DBG ("__do_fork: entering error path after supplemental_page_table_copy failure child=%s child_tid=%d\n",
+			 current->name, current->tid);
 		goto error;
+	}
 #else
 	if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
 		goto error;
