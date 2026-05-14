@@ -218,11 +218,14 @@ cat build/selected-results
 ```bash
 cd /Users/sisu/Projects/jungle/pintos/pintos/vm
 make p2-fork-one-output P2_FORK_TEST=fork-read
+
+make p2-fork-one-output P2_FORK_TEST=fork-read DEBUG_LOG=1
 ```
 
 직접 파일을 열어도 된다.
 
 ```bash
+cat build/tests/userprog/fork-once.output
 cat build/tests/userprog/fork-read.output
 ```
 
