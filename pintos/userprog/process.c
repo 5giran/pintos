@@ -1277,8 +1277,6 @@ setup_stack (struct intr_frame *if_)
 	vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true);
 	vm_claim_page (stack_bottom);
 	
-	struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
-	anon_initializer (page, VM_ANON | VM_MARKER_0, page->frame->kva); // TODO. 이거 넣는게 맞나??
 	if_->rsp = USER_STACK;
 	success = true;
 	return success;
