@@ -5,6 +5,7 @@
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include "debug_log.h"
 
 /* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
 static uint64_t
@@ -231,7 +232,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 
 	
 	if (page == NULL) {
-		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
+		DBG ("정당하지 않은 page fault 이에요.\n");
 		return false;
 	}
 	return vm_do_claim_page (page);

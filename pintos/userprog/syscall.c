@@ -19,6 +19,7 @@
 #include "userprog/process.h"
 #include "intrinsic.h"
 #include "vm/vm.h"
+#include "debug_log.h"
 
 
 void syscall_entry (void);
@@ -216,7 +217,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 				(const uint64_t) i, true);
 		
 		if (pte == NULL || (((*pte & PTE_P) == 1) && (*pte & PTE_U) == 0)) {
-			printf ("[debug] validate_user_buffer: invalid user PTE "
+			DBG ("[debug] validate_user_buffer: invalid user PTE "
 					"addr=%p pte=%p pte_val=%llx access=%d\n",
 					(const void *) i, (void *) pte,
 					pte != NULL ? (unsigned long long) *pte : 123, access);
@@ -238,7 +239,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 		}
 
 		if (access == USER_ACCESS_WRITE && (*pte & PTE_W) == 0) {
-			printf ("[debug] validate_user_buffer: write access denied "
+			DBG ("[debug] validate_user_buffer: write access denied "
 					"buffer=%p size=%zu page=%p access=%d pte=%p pte_val=%llx\n",
 					buffer, size, (const void *) i, access, (void *) pte,
 					(unsigned long long) *pte);
