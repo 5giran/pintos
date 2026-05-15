@@ -110,7 +110,7 @@ printf ("아마 spt가 제대로 kill 되지 않은 문제일 수 있어요. ...
 
 /* spt에서 VA를 찾아 page를 반환한다. 오류 시 NULL을 반환한다. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page dummy;
 	dummy.va = va;
 	/* TODO: 이 함수를 채워라. */
