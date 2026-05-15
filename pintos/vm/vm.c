@@ -220,6 +220,10 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		}
 	}
 
+	if (!is_user_vaddr (addr)) {
+		return false;
+	}
+
 	if (
 		(page == NULL) 
 		&& (addr >= rsp - 8) 
