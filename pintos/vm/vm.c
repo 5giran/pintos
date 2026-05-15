@@ -296,8 +296,9 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		vm_initializer *init = NULL;
 		void *aux = NULL;
 		if (type == VM_UNINIT) {
-			init = &src_page->uninit.init;
-			aux = &src_page->uninit.aux;
+			init = src_page->uninit.init;
+			DBG ("VM_UNINIT 일 때 고정된 쓰레기 값이 오나요??, init 포인터 주소 %p\n",  init);
+			aux = src_page->uninit.aux;
 			if (!vm_alloc_page_with_initializer (page_get_type (src_page), va, writable, init, aux)) {
 				DBG ("uninit page type 생성 실패...\n");
 				return false;
@@ -306,6 +307,7 @@ supplemental_page_table_copy (struct supplemental_page_table *dst,
 		else if (type == VM_ANON) {
 			init = vm_copy_initializer;
 			aux = src_page;
+			DBG ("VM_ANON 일 때 고정된 쓰레기 값이 오나요??, init 포인터 주소 %p\n",  init);
 			if (!vm_alloc_page_with_initializer (VM_ANON, va, writable, init, aux)) {
 				DBG ("anon page type 생성 실패...\n");
 				return false;
