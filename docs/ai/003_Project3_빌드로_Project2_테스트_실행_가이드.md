@@ -252,6 +252,101 @@ make p2-exec-basic-results
 
 요약은 `pintos/vm/build/selected-results`에 생긴다.
 
+## Project 3 stack growth 테스트 실행
+
+Project 3의 stack growth 관련 핵심 테스트만 확인하려면 `pintos/vm`에서 개별 `.result` 타깃을 실행한다.
+
+가장 권장하는 방식은 `pintos/vm/Makefile`에 추가된 편의 타깃을 쓰는 것이다. 이 타깃은 `build/` 준비, 하위 디렉터리 생성, `TEST_SUBDIRS="tests/vm tests/threads"`, `FSDISK=10` 전달을 한 번에 처리한다.
+
+테스트 하나만 실행:
+
+```bash
+cd /workspaces/pintos/pintos/vm
+make p3-stack-one P3_STACK_TEST=pt-grow-stack
+```
+
+단일 테스트의 `.result`만 만들고 바로 출력:
+
+```bash
+cd /workspaces/pintos/pintos/vm
+make p3-stack-one-result P3_STACK_TEST=pt-grow-stack
+```
+
+단일 테스트의 `.output`만 만들고 바로 출력:
+
+```bash
+cd /workspaces/pintos/pintos/vm
+make p3-stack-one-output P3_STACK_TEST=pt-grow-stack
+```
+
+핵심 4개를 한 번에 실행:
+
+```bash
+cd /workspaces/pintos/pintos/vm
+make p3-stack-growth-check
+```
+
+결과 파일만 갱신하고 요약 파일을 만들려면:
+
+```bash
+make p3-stack-growth-results
+cat build/selected-results
+```
+
+이 타깃은 내부적으로 `TEST_SUBDIRS="tests/vm tests/threads"`를 사용한다. `tests/threads`는 실행하려는 테스트 묶음이 아니라 커널 링크에 필요한 `run_test` 정의를 포함시키기 위한 빌드 의존성이다. 빼면 `undefined reference to run_test` 링크 에러가 날 수 있다.
+
+또한 내부 make에 `FSDISK=10`을 명시적으로 넘긴다. 이 값이 빠지면 실행 명령이 `--fs-disk=`처럼 비어 파일 시스템 초기화 단계에서 `hd0:1 (hdb) not present` panic이 날 수 있다.
+
+포함되는 핵심 테스트는 다음 네 개다.
+
+```text
+tests/vm/pt-grow-stack
+tests/vm/pt-grow-bad
+tests/vm/pt-big-stk-obj
+tests/vm/pt-grow-stk-sc
+```
+
+테스트 하나만 실행하려면:
+
+```bash
+make p3-stack-one P3_STACK_TEST=pt-grow-stack
+make p3-stack-one-result P3_STACK_TEST=pt-grow-stack
+make p3-stack-one-output P3_STACK_TEST=pt-grow-stack
+```
+
+이미 `.result`가 있어서 다시 실행되지 않으면 해당 테스트 산출물을 지운 뒤 다시 실행한다.
+
+```bash
+rm -f build/tests/vm/pt-grow-stack.output \
+      build/tests/vm/pt-grow-stack.errors \
+      build/tests/vm/pt-grow-stack.result
+
+make p3-stack-one-result P3_STACK_TEST=pt-grow-stack
+```
+
+커널 링크 단계에서 `_start_bss`, `_end_bss`, `start`, `_end_kernel_text`, `_end` 같은 심벌을 찾지 못하거나 relocation overflow가 나면 테스트 실패라기보다 빌드 산출물 또는 링크 스크립트 생성물이 꼬인 상태일 가능성이 높다. 이때는 한 번 깨끗하게 지우고 다시 실행한다.
+
+```bash
+cd /workspaces/pintos/pintos/vm
+make clean
+make p3-stack-one P3_STACK_TEST=pt-grow-stack
+```
+
+결과 확인:
+
+```bash
+cat build/tests/vm/pt-grow-stack.result
+cat build/tests/vm/pt-grow-stack.output
+cat build/tests/vm/pt-grow-stack.errors
+```
+
+stack 인접 회귀 테스트까지 넓혀 보고 싶으면 다음도 추가로 실행한다. `page-merge-stk`와 `mmap-over-stk`는 stack growth 자체만 보는 테스트라기보다는 stack 영역과 다른 VM 기능이 함께 깨지지 않는지 보는 쪽에 가깝다.
+
+```bash
+make p3-stack-growth-regression-results
+cat build/selected-results
+```
+
 ## Extra 2, dup2 테스트까지 포함
 
 Project 2 extra 테스트인 `dup2`까지 포함하려면 `TEST_SUBDIRS`에 `tests/userprog/dup2`를 추가하고, user program 컴파일 플래그에 `-DEXTRA2`를 준다.
