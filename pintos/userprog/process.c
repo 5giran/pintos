@@ -1190,7 +1190,7 @@ lazy_load_segment (struct page *page, void *aux)
 	off_t ofs = ((struct lazy_load_segment_aux *) aux)->ofs;
 	uint32_t read_bytes = ((struct lazy_load_segment_aux *) aux)->read_bytes;
 	uint32_t zero_bytes = ((struct lazy_load_segment_aux *) aux)->zero_bytes;
-	free (aux);
+	// free (aux);
 
 	void* kpage = page->frame->kva;
 	
