@@ -79,8 +79,7 @@ syscall_handler (struct intr_frame *f)
 {
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
-	void * buffer;
-	unsigned size;
+	thread_current ()->rsp = f->rsp;
 	switch (f->R.rax) {
 
 		/* 시스템 종료 */
@@ -176,6 +175,7 @@ syscall_handler (struct intr_frame *f)
 			break;
 		
 	}
+	thread_current ()->rsp = NULL;
 }
 
 /* Project 2는 pml4에 이미 매핑된 page만 user buffer로 인정한다.
