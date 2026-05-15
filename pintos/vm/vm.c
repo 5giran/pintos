@@ -178,7 +178,9 @@ vm_get_frame (void) {
 
 /* 스택을 확장한다. */
 static void
-vm_stack_growth (void *addr UNUSED) {
+vm_stack_growth (void *addr) {
+	vm_alloc_page (VM_ANON, addr, true);
+	vm_claim_page (addr);
 }
 
 /* write_protected page에서 발생한 fault를 처리한다. */
@@ -192,11 +194,42 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 	struct page *page = NULL;
-	if (addr == NULL) {
+	
+	void * page_addr = pg_round_down (addr);
+	if (page_addr == NULL) {
 		return false;
 	}
-	/* TODO: fault를 검증한다. */
-	page = spt_find_page (spt, addr);
+
+	page = spt_find_page (spt, page_addr);
+
+	/* TODO: fault를 검증한다. 
+		stack growth 를 위한 요청이라면...
+		1. spt 에 없어야 함.
+		2. 스택이라 주장하는 지점이 stack start point 에서 1MB 보다 더 멀리 떨어져서는 안 됨.
+		3. rsp - 8보다 작아서는 안 됨.
+	*/
+	uintptr_t rsp;
+	if (user) {
+		rsp = f->rsp;
+	} else {
+		rsp = thread_current ()->rsp;
+		if (rsp == NULL) {
+			DBG ("kernel page fault 발생, 정당하지 않은 메모리 접근 시도를 차단합니다.\n");
+			return false;
+		}
+	}
+
+	if (
+		(page == NULL) 
+		&& (addr >= rsp - 8) 
+		&& ((USER_STACK - (uintptr_t) page_addr) <= (1 << 20))
+	) {
+		vm_stack_growth (page_addr);
+	}
+	
+	page = spt_find_page (spt, page_addr);
+
+	
 	if (page == NULL) {
 		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
 		return false;
