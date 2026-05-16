@@ -189,22 +189,9 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
 
-/* 성공하면 true를 반환한다. */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt = &thread_current ()->spt;
-	struct page *page = NULL;
-	
-	void * page_addr = pg_round_down (addr);
-	if (page_addr == NULL) {
-		return false;
-	}
-
-	page = spt_find_page (spt, page_addr);
-
-	/* TODO: fault를 검증한다. 
-		stack growth 를 위한 요청이라면...
+is_valid_stack_growth_request (bool user, struct intr_frame* f, void* addr, struct page* page) {
+	/*	stack growth 를 위한 요청이라면...
 		1. spt 에 없어야 함.
 		2. 스택이라 주장하는 지점이 stack start point 에서 1MB 보다 더 멀리 떨어져서는 안 됨.
 		3. rsp - 8보다 작아서는 안 됨.
@@ -221,21 +208,49 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 
 	if (!is_user_vaddr (addr)) {
+		printf ("유저 가상 메모리가 아님... 죽었다	\n");
 		return false;
 	}
 
 	if (
 		(page == NULL) 
 		&& (addr >= rsp - 8) 
-		&& ((USER_STACK - (uintptr_t) page_addr) <= (1 << 20))
+		&& ((USER_STACK - (uintptr_t) pg_round_down (addr)) <= (1 << 20))
 	) {
-		vm_stack_growth (page_addr);
+		return true;
 	}
-	
-	page = spt_find_page (spt, page_addr);
 
-	
-	if (page == NULL) {
+	DBG ("is_valid_stack_growth_request: false\n");
+	return false;
+}
+
+/* 성공하면 true를 반환한다. */
+bool
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
+		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+	if (!not_present) {
+		DBG ("not present, DIE...	\n");
+		return false;
+	}
+	if (addr == NULL) {
+		DBG ("addr NULL... DIE...	\n");
+		return false;
+	}
+
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	struct page *page = NULL;
+	void * page_addr = pg_round_down (addr);
+
+	page = spt_find_page (spt, page_addr);
+	if (is_valid_stack_growth_request (user, f, addr, page)) {
+		vm_stack_growth (page_addr);
+	} 
+	/* TODO. else 를 쓰지 않고 이렇게 하는 이유: vm_stack_growth의 반환값이 static void 타입으로 고정되어 있다. 
+	따라서 실제 페이지가 만들어졌는지를 한 번 더 체크해줘야 한다.
+	하지만 이 예외 체크도 완벽히 모든 예외를 체크한다고 할 수는 없다... (page는 생성되었는데 물리 프레임과 매핑이 실패했다면??)
+	*/
+	page = spt_find_page (spt, page_addr);
+	if (page == NULL) {  
 		DBG ("정당하지 않은 page fault 이에요.\n");
 		return false;
 	}
