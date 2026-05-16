@@ -252,11 +252,11 @@ make p2-exec-basic-results
 
 요약은 `pintos/vm/build/selected-results`에 생긴다.
 
-## Project 3 stack growth 테스트 실행
+## Project 3 PT/stack growth 테스트 실행
 
-Project 3의 stack growth 관련 핵심 테스트만 확인하려면 `pintos/vm`에서 개별 `.result` 타깃을 실행한다.
+Project 3의 page table 및 stack growth 관련 PT 테스트를 확인하려면 `pintos/vm`에서 편의 타깃이나 개별 `.result` 타깃을 실행한다.
 
-가장 권장하는 방식은 `pintos/vm/Makefile`에 추가된 편의 타깃을 쓰는 것이다. 이 타깃은 `build/` 준비, 하위 디렉터리 생성, `TEST_SUBDIRS="tests/vm tests/threads"`, `FSDISK=10` 전달을 한 번에 처리한다.
+가장 권장하는 방식은 `pintos/vm/Makefile`에 추가된 편의 타깃을 쓰는 것이다. 이 타깃은 `build/` 준비, 하위 디렉터리 생성, `TEST_SUBDIRS="tests/vm tests/threads"`, `FSDISK=10` 전달을 한 번에 처리한다. 또한 `tests/vm/Make.tests`에서 실행 대상 바이너리를 `PUTFILES`로 자동 등록하므로, 개별 명령에 `PUTFILES=...`를 직접 붙이지 않아도 된다.
 
 테스트 하나만 실행:
 
@@ -279,30 +279,36 @@ cd /workspaces/pintos/pintos/vm
 make p3-stack-one-output P3_STACK_TEST=pt-grow-stack
 ```
 
-핵심 4개를 한 번에 실행:
+PT 8개를 한 번에 실행:
 
 ```bash
 cd /workspaces/pintos/pintos/vm
-make p3-stack-growth-check
+make p3-pt-check
 ```
 
 결과 파일만 갱신하고 요약 파일을 만들려면:
 
 ```bash
-make p3-stack-growth-results
+make p3-pt-results
 cat build/selected-results
 ```
+
+기존 이름인 `p3-stack-growth-check`, `p3-stack-growth-results`도 남아 있지만, 이제는 4개가 아니라 아래 PT 8개 전체를 실행하는 alias다.
 
 이 타깃은 내부적으로 `TEST_SUBDIRS="tests/vm tests/threads"`를 사용한다. `tests/threads`는 실행하려는 테스트 묶음이 아니라 커널 링크에 필요한 `run_test` 정의를 포함시키기 위한 빌드 의존성이다. 빼면 `undefined reference to run_test` 링크 에러가 날 수 있다.
 
 또한 내부 make에 `FSDISK=10`을 명시적으로 넘긴다. 이 값이 빠지면 실행 명령이 `--fs-disk=`처럼 비어 파일 시스템 초기화 단계에서 `hd0:1 (hdb) not present` panic이 날 수 있다.
 
-포함되는 핵심 테스트는 다음 네 개다.
+포함되는 PT 테스트는 다음 여덟 개다.
 
 ```text
 tests/vm/pt-grow-stack
 tests/vm/pt-grow-bad
 tests/vm/pt-big-stk-obj
+tests/vm/pt-bad-addr
+tests/vm/pt-bad-read
+tests/vm/pt-write-code
+tests/vm/pt-write-code2
 tests/vm/pt-grow-stk-sc
 ```
 
