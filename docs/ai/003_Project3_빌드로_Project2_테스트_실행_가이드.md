@@ -196,13 +196,15 @@ multi-oom
 
 ```bash
 cd /Users/sisu/Projects/jungle/pintos/pintos/vm
-make p2-fork-one-result P2_FORK_TEST=fork-read
+make p2-fork-one-result P2_FORK_TEST=fork-once
 ```
 
 직접 파일을 열어도 된다.
 
 ```bash
-cat build/tests/userprog/fork-read.result
+cat /workspaces/pintos/pintos/vm/build/tests/userprog/fork-once.result
+cat /workspaces/pintos/pintos/vm/build/tests/userprog/fork-once.output
+
 ```
 
 전체 fork 관련 테스트의 pass/FAIL 요약은 다음 파일에서 본다.
@@ -218,11 +220,14 @@ cat build/selected-results
 ```bash
 cd /Users/sisu/Projects/jungle/pintos/pintos/vm
 make p2-fork-one-output P2_FORK_TEST=fork-read
+
+make p2-fork-one-output P2_FORK_TEST=fork-read DEBUG_LOG=1
 ```
 
 직접 파일을 열어도 된다.
 
 ```bash
+cat build/tests/userprog/fork-once.output
 cat build/tests/userprog/fork-read.output
 ```
 

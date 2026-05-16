@@ -43,6 +43,7 @@ P2_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P2_TEST_SUBDIRS) lib/use
 P2_USER_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P2_USER_TEST_SUBDIRS) lib/user))
 P3_VM_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P3_VM_TEST_SUBDIRS) lib/user))
 
+.PHONY: p2-prepare-dirs p2-nofork-check p2-nofork-results p2-user-nofork-check p2-user-nofork-results p2-exec-basic-check p2-exec-basic-results p2-fork-check p2-fork-results p2-fork-one p2-fork-one-result p2-fork-one-output
 .PHONY: p2-prepare-dirs p3-vm-prepare-dirs p2-nofork-check p2-nofork-results p2-user-nofork-check p2-user-nofork-results p2-exec-basic-check p2-exec-basic-results p2-pointer-check p2-pointer-results p2-fork-check p2-fork-results p2-fork-one p2-fork-one-result p2-fork-one-output p3-pt-check p3-pt-results p3-stack-growth-check p3-stack-growth-results p3-stack-growth-regression-results p3-stack-one p3-stack-one-result p3-stack-one-output
 
 p2-prepare-dirs: build/Makefile

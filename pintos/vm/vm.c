@@ -5,6 +5,7 @@
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include <string.h>
 #include "debug_log.h"
 
 /* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
@@ -109,7 +110,7 @@ printf ("아마 spt가 제대로 kill 되지 않은 문제일 수 있어요. ...
 
 /* spt에서 VA를 찾아 page를 반환한다. 오류 시 NULL을 반환한다. */
 struct page *
-spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
+spt_find_page (struct supplemental_page_table *spt, void *va) {
 	struct page dummy;
 	dummy.va = va;
 	/* TODO: 이 함수를 채워라. */
@@ -313,11 +314,68 @@ supplemental_page_table_init (struct supplemental_page_table *spt) {
 	hash_init (hash, hash_func, less_func, NULL);
 }
 
+/* parent page에 매핑된 프레임의 정보를 dst_page에 매핑된 프레임으로 복사한다. */
+bool
+vm_copy_initializer (struct page *dst_page, void *aux) {  // TODO. 직관적이고, 좋은 이름을 고민해보자....
+	// TODO. 촘촘한 예외 처리를 완성하자. 일단은 기본 흐름에 대해서만 진행하자.
+	if (dst_page->frame == NULL || dst_page->frame->kva == NULL) {
+		DBG ("vm_copy_initializer: dst 페이지가 아무런 프레임과 매핑되어 있지 않아요...\n");
+		return false;
+	}
+	struct page *src_page = (struct page *) aux;
+	if (src_page->frame == NULL || src_page->frame->kva == NULL) {
+		DBG ("aux:			%p\n", aux);
+		DBG ("src_page:		%p\n", src_page);
+		DBG ("type:			%d\n", src_page->operations->type);
+		DBG ("vm_copy_initializer: src 페이지가 아무런 프레임과 매핑되어 있지 않아요...\n");
+		DBG ("vm_copy_initializer: page_frame:%p, type: %d\n", src_page->frame, src_page->operations->type);
+		return false;
+	}
+
+	memcpy (dst_page->frame->kva, src_page->frame->kva, PGSIZE);
+	return true;
+}
+
 /* supplemental page table을 src에서 dst로 복사한다. */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
+supplemental_page_table_copy (struct supplemental_page_table *dst,
+		struct supplemental_page_table *src) {
+	struct hash_iterator i;
+	hash_first (&i, &src->table);
+	while (hash_next (&i)) {
+		struct page *src_page = hash_entry (hash_cur (&i), struct page, hash_elem);
+		enum vm_type type = src_page->operations->type;
+		void* va = src_page->va;
+		bool writable = src_page->writable;
+		vm_initializer *init = NULL;
+		void *aux = NULL;
+		if (type == VM_UNINIT) {
+			init = src_page->uninit.init;
+			DBG ("VM_UNINIT 일 때 고정된 쓰레기 값이 오나요??, init 포인터 주소 %p\n",  init);
+			aux = src_page->uninit.aux;
+			if (!vm_alloc_page_with_initializer (page_get_type (src_page), va, writable, init, aux)) {
+				DBG ("uninit page type 생성 실패...\n");
+				return false;
+			}
+		}
+		else if (type == VM_ANON) {
+			init = vm_copy_initializer;
+			aux = src_page;
+			DBG ("VM_ANON 일 때 고정된 쓰레기 값이 오나요??, init 포인터 주소 %p\n",  init);
+			if (!vm_alloc_page_with_initializer (VM_ANON, va, writable, init, aux)) {
+				DBG ("anon page type 생성 실패...\n");
+				return false;
+			}
+			if (!vm_claim_page (va)) {
+				DBG ("anon page에 매핑할 프레임 생성 실패/연결 실패...\n");
+				return false;
+			}
+		}
+	}				
+	return true;
 }
+
+
 
 void
 vm_hash_destroy_func (struct hash_elem *e, void *aux UNUSED) {

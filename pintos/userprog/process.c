@@ -454,6 +454,7 @@ __do_fork (void *aux)
 
 	/* 여기까지 오면 child address space 복제가 끝난 상태란 것.
 	 * 이후 user mode로 복귀하면 parent와 같은 코드 위치에서 실행을 이어간다. */
+	DBG ("__do_fork: success...\n");
 	fa->success = true;
 	sema_up (&fa->sema);
 	do_iret (&if_);
@@ -543,7 +544,6 @@ process_exec (void *f_name)
 		return -1;
 	}
 		
-
 	/* 전환된 프로세스를 시작합니다. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -1200,7 +1200,7 @@ lazy_load_segment (struct page *page, void *aux)
 	off_t ofs = ((struct lazy_load_segment_aux *) aux)->ofs;
 	uint32_t read_bytes = ((struct lazy_load_segment_aux *) aux)->read_bytes;
 	uint32_t zero_bytes = ((struct lazy_load_segment_aux *) aux)->zero_bytes;
-	free (aux);
+	// free (aux);
 
 	void* kpage = page->frame->kva;
 	
@@ -1287,8 +1287,6 @@ setup_stack (struct intr_frame *if_)
 	vm_alloc_page (VM_ANON | VM_MARKER_0, stack_bottom, true);
 	vm_claim_page (stack_bottom);
 	
-	struct page *page = spt_find_page (&thread_current ()->spt, stack_bottom);
-	anon_initializer (page, VM_ANON | VM_MARKER_0, page->frame->kva); // TODO. 이거 넣는게 맞나??
 	if_->rsp = USER_STACK;
 	success = true;
 	return success;
