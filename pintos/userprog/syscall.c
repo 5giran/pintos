@@ -237,10 +237,17 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 			// 		(const void *) i, (void *) pte,
 			// 		(unsigned long long) *pte, access);
 			// 스레드 구조체 내부에 다 있다...
-			if (spt_find_page (&thread_current ()->spt, i) == NULL) {
-				thread_exit ();
+			struct page *page = spt_find_page (&thread_current ()->spt, i);
+			if (
+				(page == NULL) 
+				&& (i >= thread_current ()->rsp - 8) 
+				&& ((USER_STACK - (uintptr_t) pg_round_down (i)) <= (1 << 20))
+			) {
+				vm_alloc_page (VM_ANON, i, true);
+				vm_claim_page (i);
 			} else {
-				vm_claim_page(i);
+				DBG ("validate_user_buffer: no spt entry\n");
+				thread_exit ();
 			}
 		}
 
