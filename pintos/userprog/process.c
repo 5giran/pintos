@@ -960,7 +960,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 		int len = strlen(argv_tokens[i]) + 1; // 문자열 끝 \0 포함
 		rsp -= len; // 문자열 길이만큼 메모리 낮은 주소로 가서 높은 주소 방향으로 문자열 복사
 		if (rsp < USER_STACK - PGSIZE) {
-			// goto done; // rsp가 계속 작아지다가 USER_STACK - PGSIZE 보다 작아지면, 할당된 스택 page 바깥이라 잘못된 접근
+			goto done; // rsp가 계속 작아지다가 USER_STACK - PGSIZE 보다 작아지면, 할당된 스택 page 바깥이라 잘못된 접근
 		} 
 		memcpy((void *) rsp, argv_tokens[i], len);
 		/* 이후 argv 배열(명령어 문자열 인자들의 주소 배열)을 스택에 저장하기 위해 주소들을 arg_addr에 저장 */
@@ -969,12 +969,12 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	/* rsp는 원래 uintptr_t 타입이므로, rsp를 8로 나눈 나머지를 원래 rsp에서 빼주면 8의 배수로 내림 정렬이 된다.*/
 	rsp -= (rsp % 8);
 	if (rsp < USER_STACK - PGSIZE) {
-		// goto done;
+		goto done;
 	}
 	/* NULL pointer 크기 만큼 rsp 내려감 */
 	rsp -= 8;
 	if (rsp < USER_STACK - PGSIZE) {
-		// goto done;
+		goto done;
 	}
 	/* argv[argc] = NULL 
 	 * uintptr_t는 주소를 담을 수 있는 정수 타입이다.
@@ -990,7 +990,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 	for (int i = argc - 1; i >= 0; i--) {
 		rsp -= 8;
 		if (rsp < USER_STACK - PGSIZE) {
-			// goto done;
+			goto done;
 		}
 		*(char **) rsp = arg_addr[i];
 	}
@@ -1000,7 +1000,7 @@ load (const char *file_name, struct intr_frame *if_, int argc, char *argv_tokens
 
 	rsp -= 8;
 	if (rsp < USER_STACK - PGSIZE) {
-	// 	goto done;
+		goto done;
 	}
 	/* fake return address */
 	*(uintptr_t *) rsp = 0;
