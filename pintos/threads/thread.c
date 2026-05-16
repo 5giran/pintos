@@ -588,6 +588,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	#endif
 
 	t->magic = THREAD_MAGIC;
+	t->rsp = NULL;
 }
 
 /* 다음에 스케줄할 스레드를 선택해 반환한다.

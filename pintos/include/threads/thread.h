@@ -145,6 +145,7 @@ struct thread {
 	*/
 	struct intr_frame tf;               
 	unsigned magic;                     /* stack overflow를 감지한다. */
+	uintptr_t rsp;						/* 커널모드 rsp값 저장 */
 };
 
 /* false(기본값)면 round-robin scheduler를 사용한다.
