@@ -179,6 +179,9 @@ vm_get_frame (void) {
 /* 스택을 확장한다. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+	void *ad = pg_round_down(addr);
+	vm_alloc_page(VM_ANON, ad, true);
+	
 }
 
 /* write_protected page에서 발생한 fault를 처리한다. */
@@ -197,10 +200,25 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	}
 	/* TODO: fault를 검증한다. */
 	page = spt_find_page (spt, addr);
+
+	// 스택 크기 1MB 제한, 스택 시작점 바깥으로 못 빠져나오게 제한
+	if (addr < USER_STACK - (1 << 20) && addr >= USER_STACK) return false;
+
 	if (page == NULL) {
-		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
+		if (user) {
+			if (addr >= f->rsp - 8) {
+				vm_stack_growth (addr);
+				return true;
+			}
+		} else {
+			if (addr >= thread_current ()->rsp - 8) {
+				vm_stack_growth (addr);
+				return true;
+			}
+		}
+
 		return false;
-	}
+}
 	return vm_do_claim_page (page);
 }
 
