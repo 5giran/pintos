@@ -244,6 +244,7 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	page = spt_find_page (spt, page_addr);
 	if (is_valid_stack_growth_request (user, f, addr, page)) {
 		vm_stack_growth (page_addr);
+		return true;
 	} 
 	/* TODO. else 를 쓰지 않고 이렇게 하는 이유: vm_stack_growth의 반환값이 static void 타입으로 고정되어 있다. 
 	따라서 실제 페이지가 만들어졌는지를 한 번 더 체크해줘야 한다.
