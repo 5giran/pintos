@@ -196,8 +196,11 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 	const uint8_t *end_adr = bf + size - 1;
 
 	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
-	if (end_adr < bf)
+	if (end_adr < bf) {
+		DBG ("validate_user_buffer: end_adr < bf\n");
 		thread_exit ();
+	}
+		
 
 	// 순회할 시작페이지, 끝 페이지 정의
 	const uint8_t *start_page = pg_round_down (bf);
@@ -208,8 +211,11 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 	 * i는 buffer가 걸친 각 페이지의 시작 주소를 가리킴 */
 	for (const uint8_t *i = start_page; i <= end_page; i += PGSIZE) {
 		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
-		if (!is_user_vaddr (i))
+		if (!is_user_vaddr (i)) {
+			DBG ("validate_user_buffer: !is_user_vaddr\n");
 			thread_exit ();
+		}
+			
 
 		/* 현재 프로세스의 페이지 테이블에서 유저 가상주소 i에 해당하는 PTE를 찾는다.
 			create=false이므로, 없으면 새로 만들지 않고 NULL을 반환한다. */
