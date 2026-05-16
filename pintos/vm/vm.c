@@ -287,6 +287,7 @@ vm_claim_page (void *va) {
 */
 static bool
 vm_do_claim_page (struct page *page) {
+	ASSERT (page->frame == NULL);
 	struct frame *frame = vm_get_frame ();
 
 	/* 링크를 설정한다. */
