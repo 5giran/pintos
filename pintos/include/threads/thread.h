@@ -134,9 +134,11 @@ struct thread {
 	struct file *fd_table[FD_MAX];     	/* 프로세스별 파일 디스크립터 테이블 */
 	int next_fd;                       	/* 다음 할당 후보 fd */
 // #endif
+	uintptr_t rsp;
 #ifdef VM
 	/* thread가 소유한 전체 virtual memory에 대한 테이블. */
 	struct supplemental_page_table spt;
+	
 #endif
 
 	/* thread.c가 소유한다. */

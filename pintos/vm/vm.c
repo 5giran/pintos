@@ -5,6 +5,7 @@
 #include "vm/inspect.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include "debug_log.h"
 
 /* page의 va 값을 key로 삼아 hash table bucket 선택용 해시값을 만든다. */
 static uint64_t
@@ -178,7 +179,9 @@ vm_get_frame (void) {
 
 /* 스택을 확장한다. */
 static void
-vm_stack_growth (void *addr UNUSED) {
+vm_stack_growth (void *addr) {
+	vm_alloc_page (VM_ANON, addr, true);
+	vm_claim_page (addr);
 }
 
 /* write_protected page에서 발생한 fault를 처리한다. */
@@ -186,19 +189,70 @@ static bool
 vm_handle_wp (struct page *page UNUSED) {
 }
 
+bool
+is_valid_stack_growth_request (bool user, struct intr_frame* f, void* addr, struct page* page) {
+	/*	stack growth 를 위한 요청이라면...
+		1. spt 에 없어야 함.
+		2. 스택이라 주장하는 지점이 stack start point 에서 1MB 보다 더 멀리 떨어져서는 안 됨.
+		3. rsp - 8보다 작아서는 안 됨.
+	*/
+	uintptr_t rsp;
+	if (user) {
+		rsp = f->rsp;
+	} else {
+		rsp = thread_current ()->rsp;
+		if (rsp == NULL) {
+			DBG ("kernel page fault 발생, 정당하지 않은 메모리 접근 시도를 차단합니다.\n");
+			return false;
+		}
+	}
+
+	if (!is_user_vaddr (addr)) {
+		printf ("유저 가상 메모리가 아님... 죽었다	\n");
+		return false;
+	}
+
+	if (
+		(page == NULL) 
+		&& (addr >= rsp - 8) 
+		&& ((USER_STACK - (uintptr_t) pg_round_down (addr)) <= (1 << 20))
+	) {
+		return true;
+	}
+
+	DBG ("is_valid_stack_growth_request: false\n");
+	return false;
+}
+
 /* 성공하면 true를 반환한다. */
 bool
 vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
-	struct supplemental_page_table *spt = &thread_current ()->spt;
-	struct page *page = NULL;
-	if (addr == NULL) {
+	if (!not_present) {
+		DBG ("not present, DIE...	\n");
 		return false;
 	}
-	/* TODO: fault를 검증한다. */
-	page = spt_find_page (spt, addr);
-	if (page == NULL) {
-		// printf ("vm_try_handle_fault에서 찾은 spt entry가 null 이에요.\n");
+	if (addr == NULL) {
+		DBG ("addr NULL... DIE...	\n");
+		return false;
+	}
+
+	struct supplemental_page_table *spt = &thread_current ()->spt;
+	struct page *page = NULL;
+	void * page_addr = pg_round_down (addr);
+
+	page = spt_find_page (spt, page_addr);
+	if (is_valid_stack_growth_request (user, f, addr, page)) {
+		vm_stack_growth (page_addr);
+		return true;
+	} 
+	/* TODO. else 를 쓰지 않고 이렇게 하는 이유: vm_stack_growth의 반환값이 static void 타입으로 고정되어 있다. 
+	따라서 실제 페이지가 만들어졌는지를 한 번 더 체크해줘야 한다.
+	하지만 이 예외 체크도 완벽히 모든 예외를 체크한다고 할 수는 없다... (page는 생성되었는데 물리 프레임과 매핑이 실패했다면??)
+	*/
+	page = spt_find_page (spt, page_addr);
+	if (page == NULL) {  
+		DBG ("정당하지 않은 page fault 이에요.\n");
 		return false;
 	}
 	return vm_do_claim_page (page);
@@ -233,6 +287,7 @@ vm_claim_page (void *va) {
 */
 static bool
 vm_do_claim_page (struct page *page) {
+	ASSERT (page->frame == NULL);
 	struct frame *frame = vm_get_frame ();
 
 	/* 링크를 설정한다. */

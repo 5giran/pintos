@@ -19,6 +19,7 @@
 #include "userprog/process.h"
 #include "intrinsic.h"
 #include "vm/vm.h"
+#include "debug_log.h"
 
 
 void syscall_entry (void);
@@ -79,8 +80,7 @@ syscall_handler (struct intr_frame *f)
 {
 	// TODO: 구현을 여기에 작성하라.
 	/* rax에 syscall 번호가 들어 있다. */
-	void * buffer;
-	unsigned size;
+	thread_current ()->rsp = f->rsp;
 	switch (f->R.rax) {
 
 		/* 시스템 종료 */
@@ -176,6 +176,7 @@ syscall_handler (struct intr_frame *f)
 			break;
 		
 	}
+	thread_current ()->rsp = NULL;
 }
 
 /* Project 2는 pml4에 이미 매핑된 page만 user buffer로 인정한다.
@@ -195,8 +196,11 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 	const uint8_t *end_adr = bf + size - 1;
 
 	// 끝 주소 = 시작 주소보다 같거나 커야 한다, 근데 시작 주소보다 작다 (초과분이 잘린거임)
-	if (end_adr < bf)
+	if (end_adr < bf) {
+		DBG ("validate_user_buffer: end_adr < bf\n");
 		thread_exit ();
+	}
+		
 
 	// 순회할 시작페이지, 끝 페이지 정의
 	const uint8_t *start_page = pg_round_down (bf);
@@ -207,8 +211,11 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 	 * i는 buffer가 걸친 각 페이지의 시작 주소를 가리킴 */
 	for (const uint8_t *i = start_page; i <= end_page; i += PGSIZE) {
 		// page 시작주소가 user virtual address 범위 안에 있지 않다면 현재 프로세스 exit(-1)
-		if (!is_user_vaddr (i))
+		if (!is_user_vaddr (i)) {
+			DBG ("validate_user_buffer: !is_user_vaddr\n");
 			thread_exit ();
+		}
+			
 
 		/* 현재 프로세스의 페이지 테이블에서 유저 가상주소 i에 해당하는 PTE를 찾는다.
 			create=false이므로, 없으면 새로 만들지 않고 NULL을 반환한다. */
@@ -216,7 +223,7 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 				(const uint64_t) i, true);
 		
 		if (pte == NULL || (((*pte & PTE_P) == 1) && (*pte & PTE_U) == 0)) {
-			printf ("[debug] validate_user_buffer: invalid user PTE "
+			DBG ("[debug] validate_user_buffer: invalid user PTE "
 					"addr=%p pte=%p pte_val=%llx access=%d\n",
 					(const void *) i, (void *) pte,
 					pte != NULL ? (unsigned long long) *pte : 123, access);
@@ -230,15 +237,18 @@ validate_user_buffer (const void *buffer, size_t size, enum user_access access)
 			// 		(const void *) i, (void *) pte,
 			// 		(unsigned long long) *pte, access);
 			// 스레드 구조체 내부에 다 있다...
-			if (spt_find_page (&thread_current ()->spt, i) == NULL) {
-				thread_exit ();
+			struct page *page = spt_find_page (&thread_current ()->spt, i);
+			if (page == NULL && is_valid_stack_growth_request (false, NULL, i, page)) {
+				vm_alloc_page (VM_ANON, i, true);
+				vm_claim_page (i);
 			} else {
-				vm_claim_page(i);
+				DBG ("validate_user_buffer: no spt entry\n");
+				thread_exit ();
 			}
 		}
 
 		if (access == USER_ACCESS_WRITE && (*pte & PTE_W) == 0) {
-			printf ("[debug] validate_user_buffer: write access denied "
+			DBG ("[debug] validate_user_buffer: write access denied "
 					"buffer=%p size=%zu page=%p access=%d pte=%p pte_val=%llx\n",
 					buffer, size, (const void *) i, access, (void *) pte,
 					(unsigned long long) *pte);

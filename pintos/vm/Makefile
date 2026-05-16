@@ -8,10 +8,14 @@ build/Makefile: | build
 P2_TEST_SUBDIRS = tests/userprog tests/filesys/base tests/userprog/no-vm tests/threads
 P2_USER_TEST_SUBDIRS = tests/userprog tests/threads
 P3_VM_TEST_SUBDIRS = tests/vm tests/threads
-P3_STACK_GROWTH_TESTS = tests/vm/pt-grow-stack
-P3_STACK_GROWTH_TESTS += tests/vm/pt-grow-bad
-P3_STACK_GROWTH_TESTS += tests/vm/pt-big-stk-obj
-P3_STACK_GROWTH_TESTS += tests/vm/pt-grow-stk-sc
+P3_PT_TESTS = tests/vm/pt-grow-stack
+P3_PT_TESTS += tests/vm/pt-grow-bad
+P3_PT_TESTS += tests/vm/pt-big-stk-obj
+P3_PT_TESTS += tests/vm/pt-bad-addr
+P3_PT_TESTS += tests/vm/pt-bad-read
+P3_PT_TESTS += tests/vm/pt-write-code
+P3_PT_TESTS += tests/vm/pt-write-code2
+P3_PT_TESTS += tests/vm/pt-grow-stk-sc
 P3_STACK_GROWTH_REGRESSION_TESTS = tests/vm/page-merge-stk
 P3_STACK_GROWTH_REGRESSION_TESTS += tests/vm/mmap-over-stk
 P3_STACK_TEST ?= pt-grow-stack
@@ -39,7 +43,7 @@ P2_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P2_TEST_SUBDIRS) lib/use
 P2_USER_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P2_USER_TEST_SUBDIRS) lib/user))
 P3_VM_DIRS = $(sort $(addprefix build/,$(KERNEL_SUBDIRS) $(P3_VM_TEST_SUBDIRS) lib/user))
 
-.PHONY: p2-prepare-dirs p3-vm-prepare-dirs p2-nofork-check p2-nofork-results p2-user-nofork-check p2-user-nofork-results p2-exec-basic-check p2-exec-basic-results p2-pointer-check p2-pointer-results p2-fork-check p2-fork-results p2-fork-one p2-fork-one-result p2-fork-one-output p3-stack-growth-check p3-stack-growth-results p3-stack-growth-regression-results p3-stack-one p3-stack-one-result p3-stack-one-output
+.PHONY: p2-prepare-dirs p3-vm-prepare-dirs p2-nofork-check p2-nofork-results p2-user-nofork-check p2-user-nofork-results p2-exec-basic-check p2-exec-basic-results p2-pointer-check p2-pointer-results p2-fork-check p2-fork-results p2-fork-one p2-fork-one-result p2-fork-one-output p3-pt-check p3-pt-results p3-stack-growth-check p3-stack-growth-results p3-stack-growth-regression-results p3-stack-one p3-stack-one-result p3-stack-one-output
 
 p2-prepare-dirs: build/Makefile
 	mkdir -p $(P2_DIRS)
@@ -82,14 +86,20 @@ p2-fork-one-output: p2-prepare-dirs
 	cd build && $(MAKE) $(P2_FORK_TEST_PATH).output TEST_SUBDIRS="$(P2_TEST_SUBDIRS)"
 	@cat build/$(P2_FORK_TEST_PATH).output
 
-p3-stack-growth-check: p3-vm-prepare-dirs
-	cd build && $(MAKE) selected-check TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_STACK_GROWTH_TESTS)" FSDISK=10
+p3-pt-check: p3-vm-prepare-dirs
+	cd build && $(MAKE) selected-check TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_PT_TESTS)" FSDISK=10
 
-p3-stack-growth-results: p3-vm-prepare-dirs
-	cd build && $(MAKE) selected-results TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_STACK_GROWTH_TESTS)" FSDISK=10
+p3-pt-results: p3-vm-prepare-dirs
+	cd build && $(MAKE) selected-results TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_PT_TESTS)" FSDISK=10
+	@cat build/selected-results
+
+p3-stack-growth-check: p3-pt-check
+
+p3-stack-growth-results: p3-pt-results
 
 p3-stack-growth-regression-results: p3-vm-prepare-dirs
-	cd build && $(MAKE) selected-results TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_STACK_GROWTH_TESTS) $(P3_STACK_GROWTH_REGRESSION_TESTS)" FSDISK=10
+	cd build && $(MAKE) selected-results TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_PT_TESTS) $(P3_STACK_GROWTH_REGRESSION_TESTS)" FSDISK=10
+	@cat build/selected-results
 
 p3-stack-one: p3-vm-prepare-dirs
 	cd build && $(MAKE) selected-check TEST_SUBDIRS="$(P3_VM_TEST_SUBDIRS)" INCLUDE_TESTS="$(P3_STACK_TEST_PATH)" FSDISK=10
