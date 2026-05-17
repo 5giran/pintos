@@ -559,6 +559,7 @@ void *
 sys_mmap (void *addr, size_t length, int writable,
 		int fd, off_t offset) {
 			struct file *file = fd_get (fd);
+			if (file == NULL) return NULL;
 			// 검증 로직
 			if (file_length (file) == 0 || pg_ofs (addr) != 0 || addr == 0 || length == 0 || fd == 0 || fd == 1) {
 				return NULL;
@@ -567,5 +568,5 @@ sys_mmap (void *addr, size_t length, int writable,
 				if (spt_find_page (thread_current ()->spt, p)) return NULL;
 			}
 
-			do_mmap (addr, length, writable, fd, offset);
+			return do_mmap (addr, length, writable, file, offset);
 }
