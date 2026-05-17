@@ -128,6 +128,16 @@ syscall_handler (struct intr_frame *f)
 								 (unsigned) f->R.rdx);
 			break;
 
+		
+		case SYS_MMAP: {
+			f->R.rax = sys_mmap((void *) f->R.rdi,
+								(size_t) f->R.rsi,
+								(int) f->R.rdx,
+								(int) f->R.r10,
+								(off_t) f->R.r8);
+			break;
+		}
+
 		case SYS_SEEK:
 			sys_seek ((int) f->R.rdi,
 					  (unsigned) f->R.rsi);
@@ -169,6 +179,7 @@ syscall_handler (struct intr_frame *f)
 			palloc_free_page (thread_name);
 			break;
 		}
+
 
 		/* 아직 구현 안 한 syscall은 비정상 종료 */
 		default:
@@ -541,4 +552,20 @@ static void
 sys_close (int fd)
 {
 	fd_close (fd);
+}
+
+// do_mmap과 반환타입 맞춤
+void *
+sys_mmap (void *addr, size_t length, int writable,
+		int fd, off_t offset) {
+			struct file *file = fd_get (fd);
+			// 검증 로직
+			if (file_length (file) == 0 || pg_ofs (addr) != 0 || addr == 0 || length == 0 || fd == 0 || fd == 1) {
+				return NULL;
+			}
+			for (uint8_t *p = addr; p < addr + length; p += PGSIZE) {
+				if (spt_find_page (thread_current ()->spt, p)) return NULL;
+			}
+
+			do_mmap (addr, length, writable, fd, offset);
 }
