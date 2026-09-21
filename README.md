@@ -1,133 +1,191 @@
-[Rules 보기](pintos/docs/rules.md)
+# Pintos: User Programs & Virtual Memory
 
-# 📘 Docker기반 Pintos 개발 환경 구축 가이드 
+> KAIST Pintos 기반 x86-64 교육용 운영체제에서 사용자 프로그램과 가상 메모리의 핵심 경로를 구현·디버깅한 프로젝트입니다.
 
-이 문서는 **Windows**와 **macOS** 사용자가 Docker와 VSCode DevContainer 기능을 활용하여 Pintos OS 프로젝트를 빠르게 구축할 수 있도록 도와줍니다.
+| 구분 | 내용 |
+| --- | --- |
+| 기간 | 2026.04–2026.05 |
+| 팀 구성 | 2주 단위 3인 팀 × 2회 운영, 총 5명 참여 |
+| 주요 역할 | System call, SPT, lazy loading 구현·디버깅 |
+| 기술 | C, x86-64, GDB, Git, Docker, QEMU |
 
-[**주의**]
-* ubunbu:22.04 버전은 충분한 테스트와 검증이 되지 않았습니다. 이 점을 주의해서 사용하시기 바랍니다.
+## 프로젝트 개요
 
-[**참고**] 
-* pintos 도커 환경은 `64비트 기반 X86-64` 기반의 `ubuntu:22.04` 버전을 사용합니다.
-   * kaist-pintos는 오리지널 pintos와 달리 64비트 환경을 지원합니다.
-   * 이번 도커 환경은 ubuntu 22.04를 지원하여 vscode의 최신 버전에서 원격 연결이 안되는 문제를 해결하였습니다.
-* pintos 도커 환경은 kaist-pintos에서 추천하는 qemu 에뮬레이터를 설치하고 사용합니다. 
-* pintos 도커 환경은 9주차부터 13주차까지 같은 환경을 사용합니다. 이 기간동안 별도의 개발 환경을 제공하지 않습니다.
-* 기존 도커 환경과 달리 `vscode`와 통합된 디버깅 환경(F5로 시작하는)을 제공하지 않습니다. 디버깅이 필요한 경우 `gdb`를 사용하세요. 
-* vscode에서 터미널을 오픈하면 자동으로 `source /workspaces/pintos_22.04_lab_docker/pintos/activate`를 실행합니다.
+Pintos는 운영체제의 핵심 구조를 직접 구현하며 학습하는 교육용 커널입니다. 이 프로젝트에서는 KAIST Pintos의 기본 코드 위에 사용자 프로그램 실행에 필요한 system call과 프로세스 관리 기능을 연결하고, SPT lookup·lazy loading·stack growth·mmap으로 이어지는 가상 메모리 핵심 경로를 구현하고 디버깅했습니다.
 
----
+단순히 함수를 채우는 데 그치지 않고 다음 세 가지를 일관되게 유지하는 데 집중했습니다.
 
-## 1. Docker란 무엇인가요?
+- user/kernel 경계에서 사용자 주소의 유효성을 일관된 기준으로 판단할 것
+- page-aligned virtual address를 기준으로 SPT lookup 규칙을 고정할 것
+- lazy page가 실제 frame을 얻는 시점과 metadata의 생명주기를 구분할 것
 
-**Docker**는 애플리케이션을 어떤 컴퓨터에서든 **동일한 환경에서 실행**할 수 있게 도와주는 **가상화 플랫폼**입니다.  
+## 팀 구현 범위
 
-Docker는 다음 구성요소로 이루어져 있습니다:
+### User Programs
 
-- **Docker Engine**: 컨테이너를 실행하는 핵심 서비스
-- **Docker Image**: 컨테이너 생성에 사용되는 템플릿 (레시피 📃)
-- **Docker Container**: 이미지를 기반으로 생성된 실제 실행 환경 (요리 🍜)
+| 기능 | 내용 |
+| --- | --- |
+| Argument passing | 명령행을 `argc`, `argv` 형태로 구성하고 x86-64 호출 규약에 맞게 user stack에 배치 |
+| System calls | syscall dispatch와 파일·프로세스 관련 system call 처리 |
+| User memory validation | kernel 주소, unmapped 주소, 쓰기 불가능한 page 접근을 구분해 비정상 사용자 프로세스를 종료 |
+| Process lifecycle | `exec`, `fork`, `wait`, `exit` 흐름과 부모·자식 상태 및 실행 파일 생명주기 관리 |
+| File descriptor | 프로세스별 fd table과 파일 접근 경로 관리 |
 
-### ✅ AWS EC2와의 차이점
+### Virtual Memory
 
-| 구분 | EC2 같은 VM | Docker 컨테이너 |
-|------|-------------|-----------------|
-| 실행 단위 | OS 포함 전체 | 애플리케이션 단위 |
-| 실행 속도 | 느림 (수십 초 이상) | 매우 빠름 (거의 즉시) |
-| 리소스 사용 | 무거움 | 가벼움 |
+| 기능 | 내용 |
+| --- | --- |
+| Supplemental Page Table | page-aligned user virtual address를 key로 page metadata 관리 |
+| Lazy loading | 실행 파일과 mmap 영역을 즉시 읽지 않고 최초 접근 시 frame에 적재 |
+| Page fault handling | SPT lookup, stack growth 판단, page claim을 하나의 fault 처리 흐름으로 연결 |
+| Stack growth | fault 주소와 user stack pointer의 관계를 검증해 필요한 stack page만 확장 |
+| SPT copy | `fork` 시 uninit·anonymous page의 복사 경로 구성 |
+| mmap·munmap | file-backed page의 lazy load와 mmap-read·close·unmap 경로 구현 |
 
----
+## 동작 구조
 
-## 2. VSCode DevContainer란 무엇인가요?
+```mermaid
+flowchart TD
+    U[User program] -->|system call| S[syscall_handler]
+    U -->|page fault| E[page_fault]
+    S --> V[User address validation]
+    E --> F[vm_try_handle_fault]
+    V --> P[SPT lookup and page claim]
+    F --> P
+    P --> I[Uninit page]
+    I --> A[Anonymous page]
+    I --> M[File-backed page]
+    A --> R[Frame table]
+    M --> R
+    M -->|dirty on unmap| W[File write-back]
+```
 
-**DevContainer**는 VSCode에서 Docker 컨테이너를 **개발 환경**처럼 사용할 수 있게 해주는 기능입니다.
+두 진입점은 서로 다르지만 최종적으로 같은 page metadata와 claim 경로를 사용합니다.
 
-- 코드를 실행하거나 디버깅할 때 **컨테이너 내부 환경에서 동작**
-- 팀원 간 **환경 차이 없이 동일한 개발 환경 구성** 가능
-- `.devcontainer` 폴더에 정의된 설정을 VSCode가 읽어 자동 구성
+- system call은 사용자 buffer를 page 단위로 검증하고, 합법적인 lazy page라면 claim합니다.
+- page fault는 SPT에 등록된 page인지 확인하고, 필요한 경우 stack growth 여부를 판단합니다.
+- uninit page는 최초 claim 시 anonymous 또는 file-backed page로 전환됩니다.
+- mmap으로 연결한 file-backed page는 해제할 때 변경된 내용을 파일에 반영합니다.
 
----
+## 팀 문제 해결 사례
 
-## 3. Docker Desktop 설치하기
+### 1. SPT의 key와 lazy page 상태 불변식 정리
 
-1. Docker 공식 사이트에서 설치 파일 다운로드:  
-   👉 [https://www.docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop)
+**문제**
 
-2. 설치 후 Docker Desktop 실행  
-   - Windows: Docker 아이콘이 트레이에 떠야 함  
-   - macOS: 상단 메뉴바에 Docker 아이콘 확인
+SPT hash key가 가상 주소 값이 아니라 해당 주소가 가리키는 메모리처럼 해석되거나, uninit page의 현재 타입과 초기화 이후 타입을 혼동하면서 lookup 실패, 중복 삽입, null dereference가 서로 다른 위치에서 발생했습니다.
 
----
+**해결**
 
-## 4. 프로젝트 파일 다운로드 (히스토리 없이)
+SPT의 key를 page-aligned user virtual address로 고정했습니다. hash miss는 `NULL`로 처리하고, uninit 상태와 최종 page 타입을 분리해 해석했습니다. lazy loading에 필요한 initializer와 metadata도 실제 page claim 시점까지 유지하도록 생명주기를 정리했습니다.
 
-터미널(CMD, PowerShell, zsh 등)에서 아래 명령어로 프로젝트 폴더만 내려받습니다:
+**결과**
+
+`virtual address → page metadata` lookup 규칙을 하나의 invariant로 정리했습니다. 관련 변경은 [VA 기준 hash key 수정](https://github.com/5giran/pintos/commit/41f62c59c5c6ccf0b19fee750ddc98f9e3046aa6)과 [lookup 실패 시 NULL 처리](https://github.com/5giran/pintos/commit/5398ca4c1bfe42e98503272715aa2e48af397e9f)에서 확인할 수 있습니다.
+
+### 2. kernel-mode page fault에서 stack growth 판단 기준 분리
+
+**문제**
+
+stack growth는 fault 주소가 현재 user stack pointer 근처인지 확인해야 합니다. 하지만 system call 처리 중 kernel mode에서 page fault가 발생하면 exception frame의 `rsp`를 user stack pointer로 신뢰할 수 없었습니다.
+
+**해결**
+
+팀은 system call 진입 시점의 user `rsp`를 thread 상태에 보존하고, user mode fault와 kernel mode fault가 각각 신뢰할 수 있는 stack pointer를 사용하도록 분기했습니다. stack growth 판단을 별도 조건으로 분리해 page fault 처리와 user buffer validation에서 재사용했습니다.
+
+**결과**
+
+fault context에 따라 stack pointer를 선택하는 경로를 도입하고, 이후 [frame 이중 할당 문제](https://github.com/5giran/pintos/commit/b5691537095e6f28549274b1daf4ad8371966445)를 수정했습니다.
+
+### 3. mmap·munmap의 file·page 생명주기 정리
+
+**문제**
+
+mmap page가 원래 file descriptor의 file 객체에 의존하면 사용자가 fd를 닫은 뒤 lazy loading을 수행할 수 없습니다. 마지막 page의 read/zero 범위, dirty page write-back 길이, munmap 이후 SPT entry 제거 순서도 각각 오류의 원인이 됐습니다.
+
+**해결**
+
+팀은 mapping이 사용할 file reference를 독립적으로 유지하고, 각 page에 offset과 `read_bytes`, `zero_bytes`를 metadata로 저장했습니다. 해제 시에는 dirty 영역 write-back, page table과 SPT mapping 제거, file과 metadata 해제 순서를 기준으로 문제를 나눠 추적했습니다.
+
+**결과**
+
+커밋 기록 기준으로 [mmap-read·mmap-close](https://github.com/5giran/pintos/commit/8493a7e7e2f0ca472dd6974cdc430582f5f3cded)와 [mmap-unmap](https://github.com/5giran/pintos/commit/3a941cfb6848ea272f98635a457b3b5363094bfc)을 개별 확인했고, [partial page write-back 범위](https://github.com/5giran/pintos/commit/b826dfb75cbeafa2eb41e5d7271fdb31ec945e11)를 실제 `read_bytes`로 제한했습니다.
+
+## 개인 기여 근거
+
+다음은 Git author `Giran Oh`의 commit으로 확인할 수 있는 변경입니다.
+
+| 영역 | 기여 | 근거 |
+| --- | --- | --- |
+| System call | `SYS_WAIT` dispatch 추가 | [commit](https://github.com/5giran/pintos/commit/46dcbd14c011d28873906d03cc6a4b8a24200931) |
+| User buffer validation | page 단위 검증 반복문의 분기 흐름 수정 | [commit](https://github.com/5giran/pintos/commit/9d8aab2ce24e5ad3c9d57e49d142e33e0dcaebcb) |
+| SPT hash | page-aligned VA를 hash key로 고정 | [commit](https://github.com/5giran/pintos/commit/41f62c59c5c6ccf0b19fee750ddc98f9e3046aa6) |
+| SPT lookup | lookup 실패 시 `NULL`을 반환하도록 실패 경로 정리 | [commit](https://github.com/5giran/pintos/commit/5398ca4c1bfe42e98503272715aa2e48af397e9f) |
+| SPT insert | `supplemental_page_table` 내부 hash table을 삽입 대상으로 수정 | [commit](https://github.com/5giran/pintos/commit/1e1146fcd1480b8624875f8484b8608452e84236) |
+| Page allocation | page 생성 성공 반환과 삽입 실패 시 해제 경로 보완 | [commit](https://github.com/5giran/pintos/commit/d3cb66db854d714d9c115c79dceefcb3172b3fc2) |
+| Lazy loading 기반 | segment별 aux 구조 선언과 할당 경로 추가 | [declaration](https://github.com/5giran/pintos/commit/042a0c52c717f02405cea0952ff3dba7d2bb2202), [allocation](https://github.com/5giran/pintos/commit/64ef997a806f30ff480c461707a1ee0744bd6d47) |
+
+stack growth와 mmap·munmap은 팀 구현 사례로 분리했으며, 개인 기여 표에는 작성자가 확인되는 변경만 포함했습니다.
+
+## 실행 방법
+
+### 1. 개발 환경 열기
+
+Docker Desktop과 VS Code Dev Containers 확장을 설치한 뒤 저장소를 DevContainer로 엽니다. 자세한 내용은 [개발 환경 설정](docs/setup.md)을 참고하세요.
+
+### 2. Pintos 환경 활성화
 
 ```bash
-git clone --depth=1 https://github.com/krafton-jungle/pintos_22.04_lab_docker.git 
+cd pintos
+source ./activate
 ```
 
-- `--depth=1` 옵션은 git commit 히스토리를 생략하고 **최신 파일만 가져옵니다.**
-
-### 📂 다운로드 후 폴더 구조 설명
-
-```
-pintos_22.04_lab_docker/
-├── .devcontainer/
-│   ├── devcontainer.json      # VSCode에서 컨테이너 환경 설정
-│   └── Dockerfile             # pintos 개발 환경 도커 이미지 정의
-│
-├── pintos
-│   ├── threads                # 9주차 threads 프로젝트 폴더
-│   ├── userprog               # 10-11주차 user program 프로젝트 폴더
-│   └── vm                     # 12-13주차 virtual memory 프로젝트 폴더
-│
-└── README.md                  # 현재 문서
-```
----
-
-## 5. VSCode에서 해당 프로젝트 폴더 열기
-
-1. VSCode를 실행
-2. `파일 → 폴더 열기`로 방금 클론한 `pintos_22.04_lab_docker` 폴더를 선택
-
----
-
-## 6. 개발 컨테이너: 컨테이너에서 열기
-
-1. VSCode에서 `Ctrl+Shift+P` (Windows/Linux) 또는 `Cmd+Shift+P` (macOS)를 누릅니다.
-2. 명령어 팔레트에서 `Dev Containers: Reopen in Container`를 선택합니다.
-3. 이후 컨테이너가 자동으로 실행되고 빌드됩니다. 처음 컨테이너를 열면 빌드하는 시간이 오래걸릴 수 있습니다. 빌드 후, 프로젝트가 **컨테이너 안에서 실행됨**.
-
----
-
-## 7. C 파일에 브레이크포인트 설정 후 디버깅 (F5)
-pintos 랩에서는 vscode기반의 디버깅을 지원하지 않습니다. 
-
----
-## 8. 새로운 Git 리포지토리에 Commit & Push 하기
-
-금주 프로젝트를 개인 Git 리포와 같은 다른 리포지토리에 업로드하려면, 기존 Git 연결을 제거하고 새롭게 초기화해야 합니다.
-
-### ✅ 완전히 새로운 Git 리포로 업로드하는 방법
-
-아래 명령어를 순서대로 실행하세요:
+### 3. 빌드 및 테스트
 
 ```bash
-rm -rf .git
-git init
-git remote add origin https://github.com/myusername/my-new-repo.git
-git add .
-git commit -m "Clean start"
-git push -u origin main
+cd vm
+make
+
+# Project 2 회귀 테스트
+make p2-nofork-check
+make p2-fork-check
+
+# Project 3 page table·stack 테스트
+make p3-pt-check
+
+# mmap 테스트
+make p3-mmap-check
 ```
 
-### 📌 설명
+테스트 결과는 `pintos/vm/build/results`와 각 테스트의 `.result`, `.output`, `.errors` 파일에서 확인할 수 있습니다.
 
-- `rm -rf .git`: 기존 Git 기록과 연결을 완전히 삭제합니다.
-- `git init`: 현재 폴더를 새로운 Git 리포지토리로 초기화합니다.
-- `git remote add origin ...`: 새로운 리포지토리 주소를 origin으로 등록합니다.
-- `git add .` 및 `git commit`: 모든 파일을 커밋합니다.
-- `git push`: 새로운 리포에 최초 업로드(Push)합니다.
+## 저장소 구조
 
-이 과정을 거치면 기존 리포와의 연결은 완전히 제거되고, **새로운 독립적인 프로젝트로 관리**할 수 있습니다.
+```text
+.
+├── .devcontainer/        # Ubuntu 22.04 기반 개발 환경
+├── docs/                 # 프로젝트 기록과 환경 문서
+└── pintos/
+    ├── threads/          # thread와 scheduler 기반 코드
+    ├── userprog/         # process, syscall, exception 처리
+    ├── vm/               # SPT, page, frame, file-backed memory
+    ├── filesys/          # Pintos file system
+    └── tests/
+        ├── userprog/     # Project 2 테스트
+        └── vm/           # Project 3 테스트
+```
+
+주요 구현 파일은 다음과 같습니다.
+
+- [`pintos/userprog/process.c`](pintos/userprog/process.c): process 생성·복제·종료와 executable lazy loading
+- [`pintos/userprog/syscall.c`](pintos/userprog/syscall.c): syscall dispatch와 user memory validation
+- [`pintos/userprog/exception.c`](pintos/userprog/exception.c): page fault 진입점
+- [`pintos/vm/vm.c`](pintos/vm/vm.c): SPT, frame, page claim, stack growth
+- [`pintos/vm/anon.c`](pintos/vm/anon.c): anonymous page 관리
+- [`pintos/vm/file.c`](pintos/vm/file.c): file-backed page와 mmap·munmap
+
+## 참고 자료
+
+- [KAIST Pintos documentation](https://casys-kaist.github.io/pintos-kaist/)
+- [Pintos source notice](pintos/README.md)
+- [License](pintos/LICENSE)
