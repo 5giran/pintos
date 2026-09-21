@@ -69,47 +69,31 @@ flowchart TD
 
 ## 팀 문제 해결 사례
 
+세 사례 모두 **문제 → 해결 → 결과** 순서로 정리했습니다.
+
 ### 1. SPT의 key와 lazy page 상태 불변식 정리
 
-**문제**
-
-SPT hash key가 가상 주소 값이 아니라 해당 주소가 가리키는 메모리처럼 해석되거나, uninit page의 현재 타입과 초기화 이후 타입을 혼동하면서 lookup 실패, 중복 삽입, null dereference가 서로 다른 위치에서 발생했습니다.
-
-**해결**
-
-SPT의 key를 page-aligned user virtual address로 고정했습니다. hash miss는 `NULL`로 처리하고, uninit 상태와 최종 page 타입을 분리해 해석했습니다. lazy loading에 필요한 initializer와 metadata도 실제 page claim 시점까지 유지하도록 생명주기를 정리했습니다.
-
-**결과**
-
-`virtual address → page metadata` lookup 규칙을 하나의 invariant로 정리했습니다. 관련 변경은 [VA 기준 hash key 수정](https://github.com/5giran/pintos/commit/41f62c59c5c6ccf0b19fee750ddc98f9e3046aa6)과 [lookup 실패 시 NULL 처리](https://github.com/5giran/pintos/commit/5398ca4c1bfe42e98503272715aa2e48af397e9f)에서 확인할 수 있습니다.
+| 단계 | 내용 |
+| --- | --- |
+| **문제** | SPT hash key가 가상 주소 값이 아니라 해당 주소가 가리키는 메모리처럼 해석되거나, uninit page의 현재 타입과 초기화 이후 타입을 혼동하면서 lookup 실패, 중복 삽입, null dereference가 서로 다른 위치에서 발생했습니다. |
+| **해결** | SPT의 key를 page-aligned user virtual address로 고정했습니다. hash miss는 `NULL`로 처리하고, uninit 상태와 최종 page 타입을 분리해 해석했습니다. lazy loading에 필요한 initializer와 metadata도 실제 page claim 시점까지 유지하도록 생명주기를 정리했습니다. |
+| **결과** | `virtual address → page metadata` lookup 규칙을 하나의 invariant로 정리했습니다. 관련 변경은 [VA 기준 hash key 수정](https://github.com/5giran/pintos/commit/41f62c59c5c6ccf0b19fee750ddc98f9e3046aa6)과 [lookup 실패 시 NULL 처리](https://github.com/5giran/pintos/commit/5398ca4c1bfe42e98503272715aa2e48af397e9f)에서 확인할 수 있습니다. |
 
 ### 2. kernel-mode page fault에서 stack growth 판단 기준 분리
 
-**문제**
-
-stack growth는 fault 주소가 현재 user stack pointer 근처인지 확인해야 합니다. 하지만 system call 처리 중 kernel mode에서 page fault가 발생하면 exception frame의 `rsp`를 user stack pointer로 신뢰할 수 없었습니다.
-
-**해결**
-
-팀은 system call 진입 시점의 user `rsp`를 thread 상태에 보존하고, user mode fault와 kernel mode fault가 각각 신뢰할 수 있는 stack pointer를 사용하도록 분기했습니다. stack growth 판단을 별도 조건으로 분리해 page fault 처리와 user buffer validation에서 재사용했습니다.
-
-**결과**
-
-fault context에 따라 stack pointer를 선택하는 경로를 도입하고, 이후 [frame 이중 할당 문제](https://github.com/5giran/pintos/commit/b5691537095e6f28549274b1daf4ad8371966445)를 수정했습니다.
+| 단계 | 내용 |
+| --- | --- |
+| **문제** | stack growth는 fault 주소가 현재 user stack pointer 근처인지 확인해야 합니다. 하지만 system call 처리 중 kernel mode에서 page fault가 발생하면 exception frame의 `rsp`를 user stack pointer로 신뢰할 수 없었습니다. |
+| **해결** | 팀은 system call 진입 시점의 user `rsp`를 thread 상태에 보존하고, user mode fault와 kernel mode fault가 각각 신뢰할 수 있는 stack pointer를 사용하도록 분기했습니다. stack growth 판단을 별도 조건으로 분리해 page fault 처리와 user buffer validation에서 재사용했습니다. |
+| **결과** | fault context에 따라 stack pointer를 선택하는 경로를 도입하고, 이후 [frame 이중 할당 문제](https://github.com/5giran/pintos/commit/b5691537095e6f28549274b1daf4ad8371966445)를 수정했습니다. |
 
 ### 3. mmap·munmap의 file·page 생명주기 정리
 
-**문제**
-
-mmap page가 원래 file descriptor의 file 객체에 의존하면 사용자가 fd를 닫은 뒤 lazy loading을 수행할 수 없습니다. 마지막 page의 read/zero 범위, dirty page write-back 길이, munmap 이후 SPT entry 제거 순서도 각각 오류의 원인이 됐습니다.
-
-**해결**
-
-팀은 mapping이 사용할 file reference를 독립적으로 유지하고, 각 page에 offset과 `read_bytes`, `zero_bytes`를 metadata로 저장했습니다. 해제 시에는 dirty 영역 write-back, page table과 SPT mapping 제거, file과 metadata 해제 순서를 기준으로 문제를 나눠 추적했습니다.
-
-**결과**
-
-커밋 기록 기준으로 [mmap-read·mmap-close](https://github.com/5giran/pintos/commit/8493a7e7e2f0ca472dd6974cdc430582f5f3cded)와 [mmap-unmap](https://github.com/5giran/pintos/commit/3a941cfb6848ea272f98635a457b3b5363094bfc)을 개별 확인했고, [partial page write-back 범위](https://github.com/5giran/pintos/commit/b826dfb75cbeafa2eb41e5d7271fdb31ec945e11)를 실제 `read_bytes`로 제한했습니다.
+| 단계 | 내용 |
+| --- | --- |
+| **문제** | mmap page가 원래 file descriptor의 file 객체에 의존하면 사용자가 fd를 닫은 뒤 lazy loading을 수행할 수 없습니다. 마지막 page의 read/zero 범위, dirty page write-back 길이, munmap 이후 SPT entry 제거 순서도 각각 오류의 원인이 됐습니다. |
+| **해결** | 팀은 mapping이 사용할 file reference를 독립적으로 유지하고, 각 page에 offset과 `read_bytes`, `zero_bytes`를 metadata로 저장했습니다. 해제 시에는 dirty 영역 write-back, page table과 SPT mapping 제거, file과 metadata 해제 순서를 기준으로 문제를 나눠 추적했습니다. |
+| **결과** | 커밋 기록 기준으로 [mmap-read·mmap-close](https://github.com/5giran/pintos/commit/8493a7e7e2f0ca472dd6974cdc430582f5f3cded)와 [mmap-unmap](https://github.com/5giran/pintos/commit/3a941cfb6848ea272f98635a457b3b5363094bfc)을 개별 확인했고, [partial page write-back 범위](https://github.com/5giran/pintos/commit/b826dfb75cbeafa2eb41e5d7271fdb31ec945e11)를 실제 `read_bytes`로 제한했습니다. |
 
 ## 개인 기여 근거
 
