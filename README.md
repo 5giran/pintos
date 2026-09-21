@@ -13,7 +13,7 @@
 
 Pintos는 운영체제의 핵심 구조를 직접 구현하며 학습하는 교육용 커널입니다. 이 프로젝트에서는 KAIST Pintos의 기본 코드 위에 사용자 프로그램 실행에 필요한 system call과 프로세스 관리 기능을 연결하고, SPT lookup·lazy loading·stack growth·mmap으로 이어지는 가상 메모리 핵심 경로를 구현하고 디버깅했습니다.
 
-단순히 함수를 채우는 데 그치지 않고 다음 세 가지를 일관되게 유지하는 데 집중했습니다.
+다음 세 가지를 일관되게 유지하는 데 집중했습니다.
 
 - user/kernel 경계에서 사용자 주소의 유효성을 일관된 기준으로 판단할 것
 - page-aligned virtual address를 기준으로 SPT lookup 규칙을 고정할 것
